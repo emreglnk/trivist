@@ -1,0 +1,41 @@
+{
+  "name": "Trivio",
+  "description": "Play trivia, earn TRIV tokens on Base",
+  "version": "1.0.0",
+  "manifest_version": 1,
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#3b82f6",
+  "icons": [
+    {
+      "src": "/icon.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/logo.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ],
+  "permissions": [
+    "wallet",
+    "notifications"
+  ],
+  "blockchain": {
+    "network": "base-sepolia",
+    "contracts": {
+      "TRIV": {
+        "address": "0x3129DD4d0454E94fcC98C7880A730038fD325063",
+        "type": "ERC20"
+      }
+    }
+  },
+  "features": {
+    "wallet_connection": true,
+    "token_rewards": true,
+    "multiplayer": true,
+    "daily_rewards": true
+  }
+}

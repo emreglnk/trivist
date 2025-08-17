@@ -1,0 +1,2460 @@
+<!DOCTYPE html>
+<html lang="tr">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>SVG Trivia Board – Fixed Alignments & Logic</title>
+  <style>
+    :root {
+      --bg: #171821;
+      --panel: #202231;
+      --muted: #9aa0a6;
+      --white: #fff;
+      --science: #00b6b4;
+      --history: #f1c40f;
+      --art: #e91e63;
+      --sports: #27ae60;
+      --geography: #3498db;
+      --entertainment: #8e44ad;
+      --roll: #b0bec5;
+      --red: #ff3b30;
+      --green: #34c759;
+      --blue: #0a84ff;
+      --yellow: #ffd400;
+    }
+
+    * {
+      box-sizing: border-box
+    }
+
+    html,
+    body {
+      height: 100%;
+      margin: 0;
+      background: var(--bg);
+      color: var(--white);
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial
+    }
+
+    .wrap {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 14px;
+      padding: 12px
+    }
+
+    @media(min-width:980px) {
+      .wrap {
+        grid-template-columns: 1fr 340px;
+        gap: 18px;
+        padding: 18px
+      }
+    }
+
+    .board-card,
+    .right-card {
+      background: var(--panel);
+      border-radius: 16px;
+      box-shadow: 0 12px 30px rgba(0, 0, 0, .35);
+      position: relative
+    }
+
+    .board-card {
+      display: grid;
+      place-items: center;
+      padding: 8px;
+      overflow: hidden
+    }
+
+    #boardSvg {
+      width: 140%;
+      aspect-ratio: 1/1;
+      display: block;
+      border-radius: 16px;
+      position: relative;
+      z-index: 1;
+      /* animation: slowRotate 240s linear infinite */
+    }
+
+    @keyframes slowRotate {
+      0% {
+        transform: rotate(0deg)
+      }
+      100% {
+        transform: rotate(360deg)
+      }
+    }
+
+    /* Board container'a arka plan ekleyelim */
+    .board-card {
+      background: var(--panel);
+      position: relative
+    }
+
+    .board-card::before {
+      content: '';
+      position: absolute;
+      top: 8px;
+      left: 8px;
+      right: 8px;
+      bottom: 8px;
+      background-image: url('img/bg.png');
+      background-size: cover;
+      background-position: center;
+      background-repeat: no-repeat;
+      border-radius: 16px;
+      opacity: 0.05;
+      z-index: 0
+    }
+
+    .hud {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      z-index: 2
+    }
+
+    .hud .corner {
+      position: absolute;
+      pointer-events: auto;
+      padding: 8px 10px;
+      background: rgba(0, 0, 0, .35);
+      border-radius: 12px;
+      -webkit-backdrop-filter: blur(6px);
+      backdrop-filter: blur(6px)
+    }
+
+    .corner.top-left {
+      left: 10px;
+      top: 10px
+    }
+
+    .corner.top-right {
+      right: 10px;
+      top: 10px
+    }
+
+    .die {
+      width: 72px;
+      height: 72px;
+      display: grid;
+      place-items: center;
+      border-radius: 14px;
+      background: radial-gradient(circle at 30% 30%, #ffffff, #e9e9e9);
+      border: 2px solid #dddddd;
+      box-shadow: 0 6px 18px rgba(0, 0, 0, .25), inset 0 2px 3px rgba(255, 255, 255, .8);
+      cursor: pointer;
+      overflow: hidden
+    }
+
+    .die svg {
+      width: 60px;
+      height: 60px
+    }
+
+    .die .pip {
+      fill: #111
+    }
+
+    #dieImg {
+      width: 72px;
+      height: 72px;
+      display: none
+    }
+
+    .timer {
+      min-width: 110px;
+      text-align: right;
+      font-variant-numeric: tabular-nums
+    }
+
+    .timer .label {
+      color: var(--muted);
+      font-size: 12px;
+      letter-spacing: .08em;
+      text-transform: uppercase
+    }
+
+    .timer .value {
+      font-size: 28px;
+      font-weight: 700
+    }
+
+    /* Gold HUD */
+    .gold {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-weight: 700
+    }
+
+    .gold .amount {
+      font-size: 22px
+    }
+
+    .gold .coin {
+      font-size: 22px;
+      filter: drop-shadow(0 2px 4px rgba(0,0,0,0.35))
+    }
+
+    /* Modal timer */
+    .modal-timer {
+      text-align: right;
+      margin-bottom: 8px;
+      font-weight: 700
+    }
+
+    .right-card {
+      padding: 14px
+    }
+
+    .right-card h3 {
+      margin: 0 0 8px 0;
+      font-size: 18px
+    }
+
+    .controls {
+      display: grid;
+      gap: 10px;
+      margin-top: 14px;
+      grid-template-columns: repeat(2, 1fr)
+    }
+
+    .controls button {
+      padding: 10px 12px;
+      border-radius: 10px;
+      border: 1px solid #3a3a48;
+      background: #272738;
+      color: #fff;
+      cursor: pointer;
+      font-weight: 600
+    }
+
+    .controls button:hover {
+      filter: brightness(1.08)
+    }
+
+    dialog {
+      border: none;
+      border-radius: 12px;
+      padding: 0;
+      width: min(580px, 94vw);
+      background: #1e1f2a;
+      color: #fff;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, .6)
+    }
+
+    dialog::backdrop {
+      background: rgba(0, 0, 0, .6)
+    }
+
+    .modal-hd {
+      padding: 0;
+      border-bottom: none;
+      display: block
+    }
+
+    .modal-bd {
+      padding: 16px
+    }
+
+    .opts {
+      display: grid;
+      gap: 12px;
+      margin: 20px 0
+    }
+
+    .opts label {
+      display: grid;
+      grid-template-columns: 18px 1fr;
+      align-items: center;
+      gap: 12px;
+      background: rgba(255,255,255,0.03);
+      border: 2px solid rgba(255,255,255,0.1);
+      padding: 16px 20px;
+      border-radius: 12px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      font-size: 14px;
+      line-height: 1.4
+    }
+
+    .opts label:hover {
+      background: rgba(255,255,255,0.08);
+      border-color: rgba(255,255,255,0.2);
+      transform: translateX(4px)
+    }
+
+    .opts label.correct {
+      background: linear-gradient(135deg, rgba(76,175,80,0.2), rgba(76,175,80,0.1));
+      border-color: #4CAF50;
+      color: #4CAF50
+    }
+
+    .opts label.wrong {
+      background: linear-gradient(135deg, rgba(244,67,54,0.2), rgba(244,67,54,0.1));
+      border-color: #f44336;
+      color: #f44336
+    }
+
+    .modal-ft {
+      padding: 16px 20px;
+      border-top: 1px solid rgba(255,255,255,0.1);
+      display: flex;
+      gap: 12px;
+      justify-content: center;
+      background: rgba(0,0,0,0.2)
+    }
+
+    .modal-ft .btn {
+      min-width: 160px;
+      padding: 18px 28px;
+      font-size: 16px;
+      font-weight: 600;
+      justify-content: center;
+      border-radius: 16px
+    }
+
+    .modal-ft button[value="submit"] {
+      background: linear-gradient(135deg, #4CAF50, #45a049);
+      border: 3px solid #4CAF50;
+      color: white;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      box-shadow: 0 4px 15px rgba(76,175,80,0.4)
+    }
+
+    .modal-ft button[value="submit"]:hover {
+      background: linear-gradient(135deg, #45a049, #3d8b40);
+      border-color: #45a049;
+      transform: translateY(-3px) scale(1.02);
+      box-shadow: 0 8px 25px rgba(76,175,80,0.5)
+    }
+
+    .modal-ft button[value="cancel"], 
+    .modal-ft .ghost {
+      background: linear-gradient(135deg, rgba(255,100,100,0.1), rgba(255,50,50,0.05));
+      border: 3px solid rgba(255,100,100,0.3);
+      color: #ff6b6b;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      box-shadow: 0 4px 15px rgba(255,100,100,0.2)
+    }
+
+    .modal-ft button[value="cancel"]:hover, 
+    .modal-ft .ghost:hover {
+      background: linear-gradient(135deg, rgba(255,100,100,0.2), rgba(255,50,50,0.1));
+      border-color: rgba(255,100,100,0.5);
+      color: #ff5252;
+      transform: translateY(-3px) scale(1.02);
+      box-shadow: 0 8px 25px rgba(255,100,100,0.4)
+    }
+
+    .ghost {
+      background: transparent;
+      border: 1px solid #444;
+      color: #fff
+    }
+
+    .btn {
+      padding: 12px 20px;
+      border-radius: 12px;
+      cursor: pointer;
+      font-weight: 500;
+      transition: all 0.2s ease;
+      border: 2px solid transparent;
+      background: var(--panel);
+      color: var(--white)
+    }
+
+    .btn:hover {
+      background: rgba(255,255,255,0.1);
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.2)
+    }
+
+    .btn:active {
+      transform: translateY(0);
+      box-shadow: 0 2px 6px rgba(0,0,0,0.1)
+    }
+
+    .modal-header-content {
+      display: block;
+      width: 100%
+    }
+
+    .category-image {
+      width: 100%;
+      height: 120px;
+      border-radius: 16px 16px 0 0;
+      object-fit: cover;
+      border: none;
+      background: rgba(255,255,255,0.05);
+      margin-bottom: 0;
+      display: block
+    }
+
+    .modal-title {
+      font-weight: 700
+    }
+
+    .muted-note {
+      color: var(--muted);
+      margin: 8px 0 0
+    }
+
+    .q-category {
+      font-size: 12px;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      color: #9aa0a6;
+      margin-bottom: 6px
+    }
+
+    .q-text {
+      font-size: 18px;
+      font-weight: 600
+    }
+
+    .q-feedback {
+      min-height: 22px;
+      font-weight: 600;
+      text-align: center;
+      font-size: 18px;
+      margin: 20px 0 0;
+      padding: 20px;
+      border-radius: 16px;
+      position: relative;
+      overflow: hidden;
+      opacity: 0;
+      transform: scale(0.8) translateY(20px);
+      transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275)
+    }
+
+    .q-feedback.show {
+      opacity: 1;
+      transform: scale(1) translateY(0)
+    }
+
+    .q-feedback.correct {
+      background: linear-gradient(135deg, rgba(76,175,80,0.15), rgba(139,195,74,0.1));
+      border: 2px solid #4CAF50;
+      color: #4CAF50;
+      box-shadow: 0 8px 32px rgba(76,175,80,0.3)
+    }
+
+    .q-feedback.wrong {
+      background: linear-gradient(135deg, rgba(244,67,54,0.15), rgba(255,87,34,0.1));
+      border: 2px solid #f44336;
+      color: #f44336;
+      box-shadow: 0 8px 32px rgba(244,67,54,0.3)
+    }
+
+    .q-feedback::before {
+      content: '';
+      position: absolute;
+      top: 50%;
+      left: 20px;
+      transform: translateY(-50%);
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      opacity: 0;
+      animation: iconPop 0.6s ease-out 0.2s forwards
+    }
+
+    .q-feedback.correct::before {
+      background: #4CAF50;
+      box-shadow: inset 0 0 0 2px white;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='white'%3E%3Cpath d='M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z'/%3E%3C/svg%3E");
+      background-size: 20px;
+      background-position: center;
+      background-repeat: no-repeat
+    }
+
+    .q-feedback.wrong::before {
+      background: #f44336;
+      box-shadow: inset 0 0 0 2px white;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='white'%3E%3Cpath d='M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12 19 6.41z'/%3E%3C/svg%3E");
+      background-size: 18px;
+      background-position: center;
+      background-repeat: no-repeat
+    }
+
+    @keyframes iconPop {
+      0% {
+        opacity: 0;
+        transform: translateY(-50%) scale(0) rotate(-180deg)
+      }
+      50% {
+        opacity: 1;
+        transform: translateY(-50%) scale(1.2) rotate(0deg)
+      }
+      100% {
+        opacity: 1;
+        transform: translateY(-50%) scale(1) rotate(0deg)
+      }
+    }
+
+    /* Confetti animasyonu için */
+    .q-feedback.correct::after {
+      content: '🎉';
+      position: absolute;
+      top: -10px;
+      right: 20px;
+      font-size: 24px;
+      opacity: 0;
+      animation: confetti 0.8s ease-out 0.4s forwards
+    }
+
+    @keyframes confetti {
+      0% {
+        opacity: 0;
+        transform: translateY(20px) rotate(0deg) scale(0)
+      }
+      50% {
+        opacity: 1;
+        transform: translateY(-10px) rotate(180deg) scale(1.2)
+      }
+      100% {
+        opacity: 1;
+        transform: translateY(0px) rotate(360deg) scale(1)
+      }
+    }
+
+    /* Piyon parlama efektleri */
+    .pawn-token {
+      position: relative;
+    }
+
+    .pawn-token.current-player {
+      filter: brightness(1.2);
+    }
+
+    /* Rozet ışık efektleri */
+    .badge {
+      position: relative;
+      animation: badgeSparkle 2.5s ease-in-out infinite;
+      box-shadow: 0 0 12px rgba(255,255,255,0.5);
+      filter: brightness(1.1);
+    }
+
+    /* Mevcut oyuncunun rozetleri daha parlak */
+    .player-card.current-player .badge {
+      animation: badgeSparkleActive 2s ease-in-out infinite;
+      box-shadow: 0 0 15px rgba(255,255,255,0.7);
+      filter: brightness(1.3);
+    }
+
+    @keyframes badgeSparkle {
+      0%, 100% {
+        box-shadow: 
+          0 0 12px rgba(255,255,255,0.5),
+          0 0 20px rgba(255,255,255,0.3);
+        transform: scale(1);
+        filter: brightness(1.1);
+      }
+      50% {
+        box-shadow: 
+          0 0 20px rgba(255,255,255,0.8),
+          0 0 35px rgba(255,255,255,0.5),
+          0 0 50px rgba(255,255,255,0.3);
+        transform: scale(1.05);
+        filter: brightness(1.4);
+      }
+    }
+
+    @keyframes badgeSparkleActive {
+      0%, 100% {
+        box-shadow: 
+          0 0 15px rgba(255,255,255,0.7),
+          0 0 25px rgba(255,255,255,0.4);
+        transform: scale(1);
+        filter: brightness(1.3);
+      }
+      50% {
+        box-shadow: 
+          0 0 25px rgba(255,255,255,1),
+          0 0 40px rgba(255,255,255,0.7),
+          0 0 60px rgba(255,255,255,0.4);
+        transform: scale(1.08);
+        filter: brightness(1.6);
+      }
+    }
+
+    /* Rozet kategorilerine özel renkli ışık */
+    .badge.science {
+      animation: badgeSparkleScience 3s ease-in-out infinite;
+    }
+
+    .badge.history {
+      animation: badgeSparkleHistory 3s ease-in-out infinite;
+    }
+
+    .badge.art {
+      animation: badgeSparkleArt 3s ease-in-out infinite;
+    }
+
+    .badge.sports {
+      animation: badgeSparkleSports 3s ease-in-out infinite;
+    }
+
+    .badge.geography {
+      animation: badgeSparkleGeography 3s ease-in-out infinite;
+    }
+
+    .badge.entertainment {
+      animation: badgeSparkleEntertainment 3s ease-in-out infinite;
+    }
+
+    @keyframes badgeSparkleScience {
+      0%, 100% { 
+        box-shadow: 0 0 12px rgba(0,182,180,0.6), 0 0 25px rgba(0,182,180,0.4);
+        filter: brightness(1.1);
+      }
+      50% { 
+        box-shadow: 0 0 20px rgba(0,182,180,0.9), 0 0 40px rgba(0,182,180,0.6), 0 0 60px rgba(0,182,180,0.3);
+        filter: brightness(1.5);
+      }
+    }
+
+    @keyframes badgeSparkleHistory {
+      0%, 100% { 
+        box-shadow: 0 0 12px rgba(241,196,15,0.6), 0 0 25px rgba(241,196,15,0.4);
+        filter: brightness(1.1);
+      }
+      50% { 
+        box-shadow: 0 0 20px rgba(241,196,15,0.9), 0 0 40px rgba(241,196,15,0.6), 0 0 60px rgba(241,196,15,0.3);
+        filter: brightness(1.5);
+      }
+    }
+
+    @keyframes badgeSparkleArt {
+      0%, 100% { 
+        box-shadow: 0 0 12px rgba(233,30,99,0.6), 0 0 25px rgba(233,30,99,0.4);
+        filter: brightness(1.1);
+      }
+      50% { 
+        box-shadow: 0 0 20px rgba(233,30,99,0.9), 0 0 40px rgba(233,30,99,0.6), 0 0 60px rgba(233,30,99,0.3);
+        filter: brightness(1.5);
+      }
+    }
+
+    @keyframes badgeSparkleSports {
+      0%, 100% { 
+        box-shadow: 0 0 12px rgba(39,174,96,0.6), 0 0 25px rgba(39,174,96,0.4);
+        filter: brightness(1.1);
+      }
+      50% { 
+        box-shadow: 0 0 20px rgba(39,174,96,0.9), 0 0 40px rgba(39,174,96,0.6), 0 0 60px rgba(39,174,96,0.3);
+        filter: brightness(1.5);
+      }
+    }
+
+    @keyframes badgeSparkleGeography {
+      0%, 100% { 
+        box-shadow: 0 0 12px rgba(52,152,219,0.6), 0 0 25px rgba(52,152,219,0.4);
+        filter: brightness(1.1);
+      }
+      50% { 
+        box-shadow: 0 0 20px rgba(52,152,219,0.9), 0 0 40px rgba(52,152,219,0.6), 0 0 60px rgba(52,152,219,0.3);
+        filter: brightness(1.5);
+      }
+    }
+
+    @keyframes badgeSparkleEntertainment {
+      0%, 100% { 
+        box-shadow: 0 0 12px rgba(142,68,173,0.6), 0 0 25px rgba(142,68,173,0.4);
+        filter: brightness(1.1);
+      }
+      50% { 
+        box-shadow: 0 0 20px rgba(142,68,173,0.9), 0 0 40px rgba(142,68,173,0.6), 0 0 60px rgba(142,68,173,0.3);
+        filter: brightness(1.5);
+      }
+    }
+
+    .choice {
+      stroke: #fff;
+      stroke-width: 2.5;
+      fill: rgba(255, 255, 255, .1);
+      filter: drop-shadow(0 0 6px rgba(255, 255, 255, .6));
+      cursor: pointer
+    }
+
+    .choice[aria-disabled="true"] {
+      fill: rgba(255, 100, 100, .15);
+      stroke: #ff6b6b;
+      cursor: not-allowed
+    }
+
+    .target {
+      fill: rgba(255, 255, 255, .001);
+      stroke: #fff;
+      stroke-width: 3;
+      filter: drop-shadow(0 0 8px rgba(255, 255, 255, .7));
+      pointer-events: all;
+      cursor: pointer
+    }
+
+    .target[aria-disabled="true"] {
+      fill: rgba(255, 100, 100, .15);
+      stroke: #ff6b6b;
+      filter: drop-shadow(0 0 6px rgba(255, 100, 100, .8));
+      cursor: not-allowed
+    }
+
+    .players-strip {
+      width: 100%;
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 10px;
+      padding: 10px 8px 12px
+    }
+
+    .player-card {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+      padding: 16px 8px;
+      border-radius: 12px;
+      background: rgba(255,255,255,0.05);
+      border: 2px solid rgba(255,255,255,0.1);
+      transition: all 0.3s ease
+    }
+
+    .player-card.current {
+      background: rgba(255,255,255,0.1);
+      border-color: rgba(255,255,255,0.3);
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.2)
+    }
+
+    .player-avatar {
+      width: 64px;
+      height: 64px;
+      border-radius: 50%;
+      border: 4px solid rgba(255,255,255,0.2);
+      background-size: cover;
+      background-position: top;
+      background-repeat: no-repeat;
+      transition: all 0.3s ease;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.2)
+    }
+
+    .player-card.current .player-avatar {
+      border-color: rgba(255,255,255,0.6);
+      transform: scale(1.15);
+      box-shadow: 0 0 16px rgba(255,255,255,0.4), 0 4px 16px rgba(0,0,0,0.3)
+    }
+
+    .player-name {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--white);
+      text-align: center
+    }
+
+    .player-badges {
+      display: flex;
+      gap: 3px;
+      flex-wrap: wrap;
+      justify-content: center
+    }
+
+    .pcard {
+      background: #1a1b28;
+      border: 1px solid #303244;
+      border-radius: 12px;
+      padding: 10px;
+      display: grid;
+      place-items: center;
+      gap: 8px
+    }
+
+    .pcard .avatar {
+      width: 64px;
+      height: 64px;
+      border-radius: 999px;
+      overflow: hidden;
+      display: grid;
+      place-items: center;
+      font-weight: 800;
+      color: rgba(0, 0, 0, .55)
+    }
+
+    .pcard .avatar img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block
+    }
+
+    .badge-row {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      justify-content: center;
+      min-height: 18px
+    }
+
+    .badge {
+      width: 12px;
+      height: 12px;
+      border-radius: 999px;
+      border: 1px solid rgba(255, 255, 255, .5)
+    }
+
+    .pcard .name {
+      font-size: 13px;
+      opacity: .9
+    }
+  </style>
+</head>
+
+<body>
+  <div class="wrap">
+    <div class="board-card">
+      <svg id="boardSvg" viewBox="-300 -300 600 600" role="img" aria-label="Trivia board">
+        <defs id="defs"></defs>
+        <g id="segments"></g>
+        <g id="lanes"></g>
+        <g id="centerHub"></g>
+        <g id="tokens"></g>
+        <g id="choices"></g>
+      </svg>
+      <div class="players-strip" id="playersStrip"></div>
+      <div class="hud">
+        <div class="corner top-left" title="Zar at (tıkla)">
+          <div class="die" id="die">
+            <img id="dieImg" alt="dice" src="dices.svg"
+              onload="this.style.display='block'; this.previousElementSibling.style.display='none'" />
+            <svg viewBox="0 0 100 100">
+              <rect x="5" y="5" width="90" height="90" rx="14" ry="14" fill="#ffffff" stroke="#d0d0d0" stroke-width="3" />
+              <g id="pipGroup" class="pips"></g>
+            </svg>
+          </div>
+        </div>
+        <div class="corner top-right">
+          <div class="gold" title="Altın">
+            <span class="coin">🪙</span>
+            <span class="amount" id="goldText">0</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <aside class="right-card">
+      <h3>Kontroller</h3>
+      <div class="controls">
+        <button id="btnRoll">Zar At & Taşı</button>
+        <button onclick="start_timer(30)">30 sn Sayaç</button>
+        <button onclick="next_player()">Sıradaki Oyuncu</button>
+        <button onclick="reset_game()">Sıfırla</button>
+      </div>
+      <p class="muted-note" id="turnInd"></p>
+    </aside>
+  </div>
+
+  <dialog id="qModal">
+    <form method="dialog">
+      <div class="modal-hd">
+        <img id="categoryImage" class="category-image" src="" alt="Category" />
+      </div>
+      <div class="modal-bd">
+        <div class="modal-timer"><span id="modalTimerText">00:15</span></div>
+        <div id="qText" class="q-text"></div>
+        <div class="opts" id="qOpts"></div>
+        <div id="qFeedback" class="q-feedback"></div>
+      </div>
+      <div class="modal-ft"><button value="cancel" class="ghost" type="button">Vazgeç</button><button id="qSubmit"
+          value="submit" type="submit">Cevabı Gönder</button></div>
+    </form>
+  </dialog>
+
+  <script>
+  // ======= CONSTANTS & HELPERS =======
+    const USE_SKIN = false; // External SVG skin disabled
+
+    // DOM & CSS utilities
+    function css(variable) {
+      return getComputedStyle(document.documentElement).getPropertyValue(variable).trim();
+    }
+
+    function sel(query) {
+      return document.querySelector(query);
+    }
+
+    function svgEl(tagName) {
+      return document.createElementNS('http://www.w3.org/2000/svg', tagName);
+    }
+
+    // SVG transform helper - moves token to x,y position
+    function gTranslate(group, x, y) {
+      const transform = sel('#boardSvg').createSVGTransform();
+      transform.setTranslate(x, y);
+      const transformList = group.transform.baseVal;
+      if (transformList.numberOfItems) {
+        transformList.replaceItem(transform, 0);
+      } else {
+        transformList.appendItem(transform);
+      }
+    }
+
+    // ======= DICE SYSTEM =======
+    // Dice pip patterns for fallback SVG rendering
+    const PIP_PATTERNS = {
+      1: [
+        [50, 50]
+      ],
+      2: [
+        [25, 25],
+        [75, 75]
+      ],
+      3: [
+        [25, 25],
+        [50, 50],
+        [75, 75]
+      ],
+      4: [
+        [25, 25],
+        [25, 75],
+        [75, 25],
+        [75, 75]
+      ],
+      5: [
+        [25, 25],
+        [25, 75],
+        [50, 50],
+        [75, 25],
+        [75, 75]
+      ],
+      6: [
+        [25, 25],
+        [25, 50],
+        [25, 75],
+        [75, 25],
+        [75, 50],
+        [75, 75]
+      ]
+    };
+
+    // Draw dice pips for given value
+    function drawPips(value) {
+      const pipGroup = sel('#pipGroup');
+      if (!pipGroup) return;
+
+      pipGroup.innerHTML = '';
+      const pattern = PIP_PATTERNS[value] || PIP_PATTERNS[1];
+
+      pattern.forEach(([x, y]) => {
+        const circle = svgEl('circle');
+        circle.setAttribute('class', 'pip');
+        circle.setAttribute('cx', x);
+        circle.setAttribute('cy', y);
+        circle.setAttribute('r', 7);
+        pipGroup.appendChild(circle);
+      });
+    }
+
+    // Set dice to specific value (1-6)
+    function set_dice(value) {
+      value = Math.max(1, Math.min(6, Math.floor(value)));
+      drawPips(value);
+      sel('#die').dataset.value = value;
+    }
+
+    // Roll dice and return random value 1-6
+    function roll_dice() {
+      const value = 1 + Math.floor(Math.random() * 6);
+      set_dice(value);
+      return value;
+    }
+
+    // ======= BOARD CONFIGURATION =======
+    const BOARD = {
+      segments: 24, // Total ring segments
+      innerR: 150, // Inner circle radius
+      outerR: 225 // Outer circle radius
+    };
+
+    const LANE_COUNT = 4; // Number of lanes (4 directions)
+    const LANE_STEPS = 3; // Steps per lane
+
+    // Calculated values
+    const tokenPathR = (BOARD.innerR + BOARD.outerR) / 2; // Token ring radius
+    const DELTA = 2 * Math.PI / BOARD.segments; // Angle per segment
+    const RING_ROT = DELTA / 2; // Ring rotation offset
+
+    // Lane entry points (cardinal directions: N, E, S, W)
+    const LANE_ENTRIES = [0, 6, 12, 18];
+
+    // Actual entry indexes after ring rotation
+  const ENTRY_INDEXES = LANE_ENTRIES.map(idx => (idx - 1 + BOARD.segments) % BOARD.segments);
+
+    // Quick lookup: ring position -> lane ID
+    const ENTRY_LOOKUP = Object.fromEntries(ENTRY_INDEXES.map((pos, laneId) => [pos, laneId]));
+
+    // SVG element references
+    const svg = sel('#boardSvg');
+    const gSegments = sel('#segments');
+    const gLanes = sel('#lanes');
+    const gCenter = sel('#centerHub');
+    const gTokens = sel('#tokens');
+    const gChoices = sel('#choices');
+
+    // Category colors from CSS variables
+    const COL = {
+      science: css('--science'),
+      history: css('--history'),
+      art: css('--art'),
+      sports: css('--sports'),
+      geography: css('--geography'),
+      entertainment: css('--entertainment'),
+      roll: css('--roll')
+    };
+
+    // Generate balanced, randomized board category sequence
+    let boardCats = [];
+    
+    function generateBoardCategories() {
+      const categories = ['history', 'art', 'sports', 'geography', 'entertainment', 'science'];
+      const rollPositions = [0, 6, 12, 18]; // Fixed ROLL positions
+      const result = new Array(BOARD.segments);
+      
+      // Place ROLL blocks first
+      rollPositions.forEach(pos => {
+        result[pos] = 'roll';
+      });
+      
+      // Calculate how many blocks each category should get
+      const availableSlots = BOARD.segments - rollPositions.length; // 24 - 4 = 20
+      const baseCount = Math.floor(availableSlots / categories.length); // 20 / 6 = 3
+      const remainder = availableSlots % categories.length; // 20 % 6 = 2
+      
+      // Create balanced category pool
+      const categoryPool = [];
+      categories.forEach((cat, index) => {
+        const count = baseCount + (index < remainder ? 1 : 0);
+        for (let i = 0; i < count; i++) {
+          categoryPool.push(cat);
+        }
+      });
+      
+      // Shuffle the category pool
+      for (let i = categoryPool.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [categoryPool[i], categoryPool[j]] = [categoryPool[j], categoryPool[i]];
+      }
+      
+      // Fill empty positions while avoiding adjacent same colors
+      const availablePositions = [];
+      for (let pos = 0; pos < BOARD.segments; pos++) {
+        if (result[pos] === undefined) {
+          availablePositions.push(pos);
+        }
+      }
+      
+      // Shuffle categories for random placement order
+      const shuffledCategories = [...categories];
+      for (let i = shuffledCategories.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [shuffledCategories[i], shuffledCategories[j]] = [shuffledCategories[j], shuffledCategories[i]];
+      }
+      
+      // Advanced placement algorithm
+      for (const category of shuffledCategories) {
+        const categoryCount = categoryPool.filter(c => c === category).length;
+        let placed = 0;
+        
+        while (placed < categoryCount && availablePositions.length > 0) {
+          let bestPos = -1;
+          let minConflicts = Infinity;
+          
+          // Find position with minimum conflicts
+          for (let i = 0; i < availablePositions.length; i++) {
+            const pos = availablePositions[i];
+            const prevPos = (pos - 1 + BOARD.segments) % BOARD.segments;
+            const nextPos = (pos + 1) % BOARD.segments;
+            
+            let conflicts = 0;
+            if (result[prevPos] === category) conflicts++;
+            if (result[nextPos] === category) conflicts++;
+            
+            if (conflicts < minConflicts) {
+              minConflicts = conflicts;
+              bestPos = i;
+            }
+            
+            // Perfect position found (no conflicts)
+            if (conflicts === 0) break;
+          }
+          
+          // Place category at best position
+          if (bestPos !== -1) {
+            const pos = availablePositions[bestPos];
+            result[pos] = category;
+            availablePositions.splice(bestPos, 1);
+            placed++;
+          } else {
+            // Fallback: place at first available position
+            const pos = availablePositions.shift();
+            result[pos] = category;
+            placed++;
+          }
+        }
+      }
+      
+      // Fill any remaining positions (shouldn't happen, but safety)
+      for (let i = 0; i < availablePositions.length; i++) {
+        const pos = availablePositions[i];
+        const remainingCategories = categoryPool.filter(cat => 
+          !categories.some(c => categoryPool.filter(cc => cc === c).length > 
+                               result.filter(r => r === c).length));
+        result[pos] = remainingCategories[0] || categories[i % categories.length];
+      }
+      
+      return result;
+    }
+    
+    // Initialize board categories
+    boardCats = generateBoardCategories();
+
+    // ======= GEOMETRY CALCULATIONS =======
+    // Calculate token center points on the ring
+    const points = (() => {
+      const result = [];
+      for (let i = 0; i < BOARD.segments; i++) {
+        const angle = ((i + 0.5) * DELTA + RING_ROT) - Math.PI / 2;
+        result.push({
+          angle: angle,
+          x: Math.cos(angle) * tokenPathR,
+          y: Math.sin(angle) * tokenPathR
+        });
+      }
+      return result;
+    })();
+
+    // Global geometry storage
+    let SEG_PATH_D = []; // Segment path definitions
+    let laneGeom; // Lane geometry data
+    let LANE_CATS = []; // Lane categories by depth
+
+    // Find nearest lane ID for a ring index (utility function)
+    function getLaneIdForRingIndex(ringIndex) {
+      const ringAngle = points[ringIndex].angle;
+      let bestLaneId = 0;
+      let bestDifference = Infinity;
+
+      for (let laneId = 0; laneId < LANE_ENTRIES.length; laneId++) {
+        const laneAngle = (LANE_ENTRIES[laneId] * DELTA) - Math.PI / 2;
+        const angleDiff = Math.abs(Math.atan2(Math.sin(ringAngle - laneAngle), Math.cos(ringAngle - laneAngle)));
+
+        if (angleDiff < bestDifference) {
+          bestDifference = angleDiff;
+          bestLaneId = laneId;
+        }
+      }
+      return bestLaneId;
+    }
+
+  // ======= BOOTSTRAP =======
+    (async function bootstrap() {
+    await applySkin();
+      laneGeom = buildLaneGeometry();
+      drawBoard();
+      drawLanes();
+      drawCenter();
+      createTokens();
+      layoutTokens();
+      renderPlayersStrip();
+      updateTurnInd();
+      updateCurrentPlayer();
+      set_dice(1);
+  })();
+
+    async function applySkin() {
+      if (!USE_SKIN) return;
+      try {
+        await fetch('board.svg')
+      } catch (e) {}
+    }
+
+    function buildLaneGeometry() {
+    // Düz (dikdörtgen) iç yollar
+      const delta = 2 * Math.PI / BOARD.segments;
+      const rStart = BOARD.innerR - 10;
+      const rEnd = 40;
+      const gap = 6;
+      const laneW = 28;
+      const L = rStart - rEnd;
+      const stepLen = (L - gap * (LANE_STEPS - 1)) / LANE_STEPS;
+      const lanes = [];
+      const centers = [];
+      LANE_CATS = [];
+
+      LANE_ENTRIES.forEach((idx) => {
+        const theta = (idx * delta) - Math.PI / 2; // kardinal doğrultu
+        const laneRects = [];
+        const pts = [];
+        const cats = [];
+        for (let j = 0; j < LANE_STEPS; j++) {
+          const rc = rStart - (j + 0.5) * stepLen - j * gap;
+          const cx = Math.cos(theta) * rc;
+          const cy = Math.sin(theta) * rc;
+          let cat = boardCats[(idx + j) % BOARD.segments];
+          
+          // Replace 'roll' categories in lanes with normal categories
+          if (cat === 'roll') {
+            const categorySequence = ['history', 'art', 'sports', 'geography', 'entertainment', 'science'];
+            cat = categorySequence[j % categorySequence.length];
+          }
+          
+          laneRects.push({
+            cx,
+            cy,
+            theta,
+            w: stepLen,
+            h: laneW,
+            color: COL[cat] || COL.science
+          });
+          pts.push({
+            rc,
+            theta
+          });
+          cats.push(cat);
+        }
+        lanes.push(laneRects);
+        centers.push(pts);
+        LANE_CATS.push(cats);
+      });
+      return {
+        lanes,
+        centers
+      };
+  }
+
+  // ======= DRAW =======
+    function ringSlice(i) {
+      const a0 = (i * DELTA + RING_ROT) - Math.PI / 2;
+      const a1 = ((i + 1) * DELTA + RING_ROT) - Math.PI / 2;
+      const p1 = {
+        x: BOARD.innerR * Math.cos(a0),
+        y: BOARD.innerR * Math.sin(a0)
+      };
+      const p2 = {
+        x: BOARD.outerR * Math.cos(a0),
+        y: BOARD.outerR * Math.sin(a0)
+      };
+      const p3 = {
+        x: BOARD.outerR * Math.cos(a1),
+        y: BOARD.outerR * Math.sin(a1)
+      };
+      const p4 = {
+        x: BOARD.innerR * Math.cos(a1),
+        y: BOARD.innerR * Math.sin(a1)
+      };
+      return `M ${p1.x} ${p1.y} L ${p2.x} ${p2.y} A ${BOARD.outerR} ${BOARD.outerR} 0 0 1 ${p3.x} ${p3.y} L ${p4.x} ${p4.y} A ${BOARD.innerR} ${BOARD.innerR} 0 0 0 ${p1.x} ${p1.y} Z`
+    }
+
+    function drawBoard() {
+      gSegments.innerHTML = '';
+      SEG_PATH_D = [];
+      for (let i = 0; i < BOARD.segments; i++) {
+        const d = ringSlice(i);
+        SEG_PATH_D[i] = d;
+        const p = svgEl('path');
+        p.setAttribute('d', d);
+        p.setAttribute('fill', COL[boardCats[i]] || COL.science);
+        p.setAttribute('stroke', '#2b2b36');
+        p.setAttribute('stroke-width', '1');
+        p.setAttribute('fill-opacity', i % 2 ? 0.95 : 1);
+        gSegments.appendChild(p);
+        if (boardCats[i] === 'roll') {
+          const {
+            x,
+            y,
+            angle
+          } = points[i];
+          const t = svgEl('text');
+          t.setAttribute('x', x);
+          t.setAttribute('y', y);
+          t.setAttribute('text-anchor', 'middle');
+          t.setAttribute('dominant-baseline', 'middle');
+          t.setAttribute('font-size', '12');
+          t.setAttribute('fill', '#111');
+          t.setAttribute('transform', `rotate(${(angle*180/Math.PI)},${x},${y})`);
+          t.textContent = 'ROLL';
+          gSegments.appendChild(t)
+        }
+      }
+      const borderOut = svgEl('circle');
+      borderOut.setAttribute('r', BOARD.outerR);
+      borderOut.setAttribute('fill', 'none');
+      borderOut.setAttribute('stroke', '#111');
+      borderOut.setAttribute('stroke-width', '4');
+      gSegments.appendChild(borderOut);
+      const borderIn = svgEl('circle');
+      borderIn.setAttribute('r', BOARD.innerR);
+      borderIn.setAttribute('fill', 'none');
+      borderIn.setAttribute('stroke', '#111');
+      borderIn.setAttribute('stroke-width', '4');
+      gSegments.appendChild(borderIn);
+    }
+
+    function drawLanes() {
+      gLanes.innerHTML = '';
+      laneGeom.lanes.forEach(lane => {
+        lane.forEach(seg => {
+          const r = svgEl('rect');
+          r.setAttribute('width', seg.w);
+          r.setAttribute('height', seg.h);
+          r.setAttribute('fill', seg.color);
+          r.setAttribute('stroke', '#2b2b36');
+          r.setAttribute('stroke-width', '1');
+          const deg = seg.theta * 180 / Math.PI;
+          r.setAttribute('transform',
+            `translate(${seg.cx},${seg.cy}) rotate(${deg}) translate(${-seg.w/2},${-seg.h/2})`);
+          gLanes.appendChild(r);
+        })
+      });
+    }
+
+    function drawCenter() {
+      gCenter.innerHTML = '';
+      const c = svgEl('circle');
+      c.setAttribute('r', '28');
+      c.setAttribute('fill', '#fff');
+      c.setAttribute('stroke', '#ddd');
+      c.setAttribute('stroke-width', '2');
+      gCenter.appendChild(c)
+    }
+
+    // ======= PLAYER SYSTEM =======
+    const PLAYERS = {
+      red: {
+        color: css('--red'),
+        state: 'center', // 'center', 'ring', or 'lane'
+        pos: 0, // Ring position (0-23)
+        offset: 0, // Visual offset for multiple players
+        badges: new Set(), // Collected category badges
+        lane: null, // Lane info: {id, depth, dir}
+        avatar: 'user.svg',
+        tokenEl: null, // SVG element reference
+        bodyEl: null, // Token body element
+        haloEl: null // Badge halo element
+      },
+      green: {
+        color: css('--green'),
+        state: 'center',
+        pos: 0,
+        offset: 0,
+        badges: new Set(),
+        lane: null,
+        avatar: 'user.svg',
+        tokenEl: null,
+        bodyEl: null,
+        haloEl: null
+      },
+      blue: {
+        color: css('--blue'),
+        state: 'center',
+        pos: 0,
+        offset: 0,
+        badges: new Set(),
+        lane: null,
+        avatar: 'user.svg',
+        tokenEl: null,
+        bodyEl: null,
+        haloEl: null
+      },
+      yellow: {
+        color: css('--yellow'),
+        state: 'center',
+        pos: 0,
+        offset: 0,
+        badges: new Set(),
+        lane: null,
+        avatar: 'user.svg',
+        tokenEl: null,
+        bodyEl: null,
+        haloEl: null
+      }
+    };
+
+    let CURRENT = 'red'; // Current player turn
+
+    function createTokens() {
+      gTokens.innerHTML = '';
+      for (const id of Object.keys(PLAYERS)) {
+        const p = PLAYERS[id];
+        const g = svgEl('g');
+        g.setAttribute('id', `token-${id}`);
+        gTokens.appendChild(g);
+        p.tokenEl = g;
+        // Use background image for pawn textures
+        const textureMap = {
+          '#0a84ff': 'img/blue.png',
+          '#34c759': 'img/green.png', 
+          '#ff3b30': 'img/red.png',
+          '#ffd400': 'img/yellow.png'
+        };
+        
+        // Create a foreignObject to hold the styled div - even bigger without border
+        const foreign = svgEl('foreignObject');
+        foreign.setAttribute('x', '-15');
+        foreign.setAttribute('y', '-15');
+        foreign.setAttribute('width', '30');
+        foreign.setAttribute('height', '30');
+        
+        const pawnDiv = document.createElement('div');
+        pawnDiv.style.width = '30px';
+        pawnDiv.style.height = '30px';
+        pawnDiv.style.borderRadius = '50%';
+        pawnDiv.style.backgroundImage = `url(${textureMap[p.color]})`;
+        pawnDiv.style.backgroundSize = 'cover';
+        pawnDiv.style.backgroundPosition = 'center';
+        pawnDiv.style.backgroundRepeat = 'no-repeat';
+        pawnDiv.style.backgroundColor = p.color; // Fallback color
+        pawnDiv.style.boxShadow = '0 3px 10px rgba(0,0,0,0.4)';
+        pawnDiv.style.transition = 'all 0.3s ease';
+        pawnDiv.className = 'pawn-token';
+        
+        foreign.appendChild(pawnDiv);
+        
+        // Create glow effect circle with player's color
+        const glowCircle = svgEl('circle');
+        glowCircle.setAttribute('cx', '0');
+        glowCircle.setAttribute('cy', '0');
+        glowCircle.setAttribute('r', '20');
+        
+        // Set glow color based on player color
+        const glowColorMap = {
+          '#0a84ff': 'rgba(10, 132, 255, 0.4)', // Blue
+          '#34c759': 'rgba(52, 199, 89, 0.4)',  // Green
+          '#ff3b30': 'rgba(255, 59, 48, 0.4)',  // Red
+          '#ffd400': 'rgba(255, 212, 0, 0.4)'   // Yellow
+        };
+        
+        const strokeColorMap = {
+          '#0a84ff': 'rgba(10, 132, 255, 0.8)', // Blue
+          '#34c759': 'rgba(52, 199, 89, 0.8)',  // Green
+          '#ff3b30': 'rgba(255, 59, 48, 0.8)',  // Red
+          '#ffd400': 'rgba(255, 212, 0, 0.8)'   // Yellow
+        };
+        
+        glowCircle.setAttribute('fill', glowColorMap[p.color] || 'rgba(255,255,255,0.3)');
+        glowCircle.setAttribute('stroke', strokeColorMap[p.color] || 'rgba(255,255,255,0.6)');
+        glowCircle.setAttribute('stroke-width', '2');
+        glowCircle.style.display = 'none'; // Hidden by default
+        
+        // Add SVG animation
+        const animateR = svgEl('animate');
+        animateR.setAttribute('attributeName', 'r');
+        animateR.setAttribute('values', '18;25;18');
+        animateR.setAttribute('dur', '1.5s');
+        animateR.setAttribute('repeatCount', 'indefinite');
+        
+        const animateOpacity = svgEl('animate');
+        animateOpacity.setAttribute('attributeName', 'opacity');
+        animateOpacity.setAttribute('values', '0.6;1;0.6');
+        animateOpacity.setAttribute('dur', '1.5s');
+        animateOpacity.setAttribute('repeatCount', 'indefinite');
+        
+        glowCircle.appendChild(animateR);
+        glowCircle.appendChild(animateOpacity);
+        
+        g.appendChild(glowCircle);
+        g.appendChild(foreign);
+        p.bodyEl = pawnDiv;
+        p.glowEl = glowCircle;
+        const halo = svgEl('g');
+        g.appendChild(halo);
+        p.haloEl = halo
+      }
+    }
+
+    function layoutTokens() {
+      const centerPlayers = Object.keys(PLAYERS).filter(id => PLAYERS[id].state === 'center');
+      const cenR = 18;
+      centerPlayers.forEach((id, i) => {
+        const p = PLAYERS[id];
+        const a = -Math.PI / 2 + i * (2 * Math.PI / centerPlayers.length);
+        const x = Math.cos(a) * cenR;
+        const y = Math.sin(a) * cenR;
+        gTranslate(p.tokenEl, x, y);
+        renderHalo(p)
+      });
+      for (const id of Object.keys(PLAYERS)) {
+        const p = PLAYERS[id];
+        if (p.state !== 'center') {
+          if (p.state === 'lane' && p.lane) {
+            const c = laneGeom.centers[p.lane.id][p.lane.depth - 1];
+            const nx = -Math.sin(c.theta),
+              ny = Math.cos(c.theta);
+            const x = Math.cos(c.theta) * c.rc + nx * p.offset * 0.3;
+            const y = Math.sin(c.theta) * c.rc + ny * p.offset * 0.3;
+            gTranslate(p.tokenEl, x, y)
+          } else {
+            const pt = points[p.pos % points.length];
+            // Use radial offset instead of angular offset for better alignment
+            const offsetRadius = tokenPathR + p.offset * 0.15;
+            const x = Math.cos(pt.angle) * offsetRadius;
+            const y = Math.sin(pt.angle) * offsetRadius;
+            gTranslate(p.tokenEl, x, y);
+          }
+          renderHalo(p)
+        }
+      }
+    }
+
+    function renderHalo(p) {
+      const h = p.haloEl;
+      h.innerHTML = '';
+      const n = p.badges.size;
+      if (!n) return;
+      const cats = [...p.badges];
+      const R = 16;
+      for (let i = 0; i < n; i++) {
+        const a = i * 2 * Math.PI / n;
+        const cx = Math.cos(a) * R;
+        const cy = Math.sin(a) * R;
+        const c = svgEl('circle');
+        c.setAttribute('cx', cx);
+        c.setAttribute('cy', cy);
+        c.setAttribute('r', '3.5');
+        c.setAttribute('fill', COL[cats[i]] || '#fff');
+        c.setAttribute('stroke', '#000');
+        c.setAttribute('stroke-width', '1');
+        h.appendChild(c)
+      }
+    }
+
+  // ======= OCCUPANCY =======
+    function isRingOccupied(idx, except) {
+      for (const id of Object.keys(PLAYERS)) {
+        if (id === except) continue;
+        const q = PLAYERS[id];
+        if (q.state === 'ring' && q.pos === idx) return true
+      }
+      return false
+    }
+
+    function isLaneOccupied(laneId, depth, except) {
+      for (const id of Object.keys(PLAYERS)) {
+        if (id === except) continue;
+        const q = PLAYERS[id];
+        if (q.state === 'lane' && q.lane && q.lane.id === laneId && q.lane.depth === depth) return true
+      }
+      return false
+    }
+
+    function getIdByPlayer(p) {
+      for (const id of Object.keys(PLAYERS)) {
+        if (PLAYERS[id] === p) return id
+      }
+      return null
+    }
+
+  // ======= MOVE API =======
+    /**
+     * Main function to move a player by given steps
+     * @param {string} color - Player color ('red', 'green', 'blue', 'yellow')
+     * @param {number} steps - Number of steps to move
+     * @returns {Object} {moved: boolean, rollAgain: boolean}
+     */
+    window.move_player = async function (color, steps) {
+      const player = PLAYERS[color];
+      if (!player) return {
+        moved: false,
+        rollAgain: false
+      };
+
+      stop_timer();
+      const moved = await animateMoveInteractive(player, Math.floor(steps));
+      const result = {
+        moved,
+        rollAgain: false
+      };
+
+      // Handle movement failure
+      if (!moved) {
+        info('Hareket Edilemedi', 'Hareket edecek boş hücre yok, sıra sonrakine geçiyor.');
+        return result;
+      }
+
+      // Check for victory condition
+      if (player.state === 'center' && player.badges.size >= 6) {
+        info('Tebrikler!', 'Merkeze tüm rozetlerle döndün — oyunu kazandın!');
+        return result;
+      }
+
+      // Handle landing actions based on final position
+      if (player.state === 'ring') {
+        const category = boardCats[player.pos];
+        console.debug('Player landed on ring position:', player.pos, 'Category:', category);
+
+        if (category === 'roll') {
+          info('Roll Again', 'Tekrar zar at!');
+          result.rollAgain = true;
+        } else {
+          await askQuestion(category, color);
+        }
+      } else if (player.state === 'lane' && player.lane) {
+        const depth = Math.max(1, player.lane.depth);
+        const category = LANE_CATS[player.lane.id][depth - 1];
+        console.debug('Player landed in lane:', player.lane.id, 'Depth:', depth, 'Category:', category);
+
+        if (category) {
+          await askQuestion(category, color);
+        }
+      }
+
+      return result;
+    };
+
+    async function animateMoveInteractive(p, steps) {
+      let rem = steps,
+        moved = false;
+      // If player is on ring, let them choose direction (clockwise/counterclockwise)
+      let ringDirection = null;
+      let stickToRing = false;
+
+      if (p.state === 'ring' && steps > 0) {
+        const directionChoice = await chooseRingAdvance(p, steps);
+        if (directionChoice === 'blocked') return moved;
+
+        if (directionChoice === 'cw' || directionChoice === 'ccw') {
+          ringDirection = directionChoice;
+          stickToRing = true;
+        }
+      }
+      while (rem > 0) {
+        if (p.state === 'ring' && ENTRY_INDEXES.includes(p.pos) && !stickToRing) {
+          const choice = await chooseFromRing(p); // kullanıcı seçmeden ilerleme
+          if (choice === 'lane') {
+            const laneId = ENTRY_LOOKUP[p.pos];
+            p.state = 'lane';
+            p.lane = {
+              id: laneId,
+              depth: 0,
+              dir: 'in'
+            };
+          }
+        }
+                 if (p.state === 'center') {
+           const choice = await chooseFromCenter(p, steps);
+           if (choice === 'blocked') return moved;
+           
+           // Move through lane: center -> lane steps -> ring
+           p.state = 'lane';
+           p.lane = { id: choice.laneId, depth: LANE_STEPS, dir: 'out' };
+           
+           // Animate through all lane steps
+           for (let step = LANE_STEPS; step >= 1; step--) {
+             p.lane.depth = step;
+             const c = laneGeom.centers[choice.laneId][step - 1];
+             const nx = -Math.sin(c.theta), ny = Math.cos(c.theta);
+             const x = Math.cos(c.theta) * c.rc + nx * p.offset * 0.3;
+             const y = Math.sin(c.theta) * c.rc + ny * p.offset * 0.3;
+             await new Promise(res => animateTokenTo(p, x, y, 230, () => res()));
+             moved = true;
+             rem--;
+             if (rem <= 0) break;
+           }
+           
+           // If still have steps, exit to ring
+           if (rem > 0) {
+             p.state = 'ring';
+             p.pos = ENTRY_INDEXES[choice.laneId];
+             p.lane = null;
+             
+             const pt = points[p.pos];
+             const offsetRadius = tokenPathR + p.offset * 0.15;
+             const x = Math.cos(pt.angle) * offsetRadius;
+             const y = Math.sin(pt.angle) * offsetRadius;
+             await new Promise(res => animateTokenTo(p, x, y, 230, () => res()));
+             
+             moved = true;
+             rem--;
+             
+             // If there are remaining steps, continue with ring movement
+             if (choice.remainingSteps > 0 && choice.direction) {
+               ringDirection = choice.direction;
+               stickToRing = true;
+               rem = choice.remainingSteps;
+             }
+           }
+           continue;
+         }
+        const ok = await stepOnce(p, ringDirection);
+        if (!ok) break;
+        moved = true;
+        rem--;
+        if (p.state === 'center') break;
+    }
+    return moved;
+  }
+
+    function stepOnce(p, ringDir = null) {
+      return new Promise(resolve => {
+        const dur = 230;
+        if (p.state === 'lane' && p.lane) {
+          if (p.lane.dir === 'in') {
+            const next = p.lane.depth + 1;
+            if (next > LANE_STEPS) {
+              // Merkeze ancak 6 rozetle girilebilir
+              if (p.badges.size < 6) {
+                resolve(false);
+                return
+              }
+              p.state = 'center';
+              p.lane = null;
+              animateTokenTo(p, 0, 0, dur, () => {
+                layoutTokens();
+                resolve(true)
+              });
+              return
+            }
+            if (isLaneOccupied(p.lane.id, next, getIdByPlayer(p))) {
+              resolve(false);
+              return
+            }
+            p.lane.depth = next;
+            const c = laneGeom.centers[p.lane.id][p.lane.depth - 1];
+            const nx = -Math.sin(c.theta),
+              ny = Math.cos(c.theta);
+            const x = Math.cos(c.theta) * c.rc + nx * p.offset * 0.3;
+            const y = Math.sin(c.theta) * c.rc + ny * p.offset * 0.3;
+            animateTokenTo(p, x, y, dur, () => resolve(true));
+          } else { // dir==='out'
+            const next = p.lane.depth - 1;
+            if (next === 0) {
+              const entry = ENTRY_INDEXES[p.lane.id];
+              if (isRingOccupied(entry, getIdByPlayer(p))) {
+                resolve(false);
+                return
+              }
+              p.state = 'ring';
+              p.pos = entry;
+              p.lane = null;
+              const pt = points[p.pos];
+              const offsetRadius = tokenPathR + p.offset * 0.15;
+              const x = Math.cos(pt.angle) * offsetRadius;
+              const y = Math.sin(pt.angle) * offsetRadius;
+              animateTokenTo(p, x, y, dur, () => resolve(true));
+              return
+            }
+            if (isLaneOccupied(p.lane.id, next, getIdByPlayer(p))) {
+              resolve(false);
+              return
+            }
+            p.lane.depth = next;
+            const c = laneGeom.centers[p.lane.id][p.lane.depth - 1];
+            const nx = -Math.sin(c.theta),
+              ny = Math.cos(c.theta);
+            const x = Math.cos(c.theta) * c.rc + nx * p.offset * 0.3;
+            const y = Math.sin(c.theta) * c.rc + ny * p.offset * 0.3;
+            animateTokenTo(p, x, y, dur, () => resolve(true));
+          }
+        } else if (p.state === 'ring') {
+          const stepDir = ringDir === 'ccw' ? -1 : 1; // cw varsayılan
+          const next = (p.pos + stepDir + BOARD.segments) % BOARD.segments;
+          if (isRingOccupied(next, getIdByPlayer(p))) {
+            resolve(false);
+            return
+          }
+          p.pos = next;
+          const pt = points[p.pos];
+          const offsetRadius = tokenPathR + p.offset * 0.15;
+          const x = Math.cos(pt.angle) * offsetRadius;
+          const y = Math.sin(pt.angle) * offsetRadius;
+          animateTokenTo(p, x, y, dur, () => resolve(true));
+      } else resolve(false);
+    })
+  }
+
+    /**
+     * Show direction choice for ring movement (clockwise/counterclockwise)
+     * @param {Object} player - Player object
+     * @param {number} steps - Number of steps to move
+     * @returns {Promise<string>} Direction choice ('cw', 'ccw', or 'blocked')
+     */
+    function chooseRingAdvance(player, steps) {
+      return new Promise(resolve => {
+        gChoices.innerHTML = '';
+
+        // Default to clockwise if not on ring or no steps
+        if (player.state !== 'ring' || steps <= 0) {
+          resolve('cw');
+          return;
+        }
+
+        // Calculate immediate next step and final target positions for both directions
+        const cwNext = (player.pos + 1) % BOARD.segments;
+        const ccwNext = (player.pos - 1 + BOARD.segments) % BOARD.segments;
+        const clockwiseTarget = (player.pos + steps) % BOARD.segments;
+        const counterclockwiseTarget = (player.pos - steps + BOARD.segments) % BOARD.segments;
+
+        // Block if the FIRST step is occupied (what actually prevents movement)
+        const cwBlocked = isRingOccupied(cwNext, getIdByPlayer(player));
+        const ccwBlocked = isRingOccupied(ccwNext, getIdByPlayer(player));
+
+        // Create clockwise option
+        const cwPath = svgEl('path');
+        // highlight the immediate next cell since movement happens step-by-step
+        cwPath.setAttribute('d', SEG_PATH_D[cwNext]);
+        cwPath.setAttribute('class', 'target');
+        if (cwBlocked) cwPath.setAttribute('aria-disabled', 'true');
+        cwPath.addEventListener('click', () => {
+          if (cwBlocked) {
+            info('Pas', 'İlk adım (saat yönü) dolu.');
+            return;
+          }
+          gChoices.innerHTML = '';
+          resolve('cw');
+        });
+        gChoices.appendChild(cwPath);
+
+        // Create counterclockwise option
+        const ccwPath = svgEl('path');
+        // highlight the immediate next cell since movement happens step-by-step
+        ccwPath.setAttribute('d', SEG_PATH_D[ccwNext]);
+        ccwPath.setAttribute('class', 'target');
+        if (ccwBlocked) ccwPath.setAttribute('aria-disabled', 'true');
+        ccwPath.addEventListener('click', () => {
+          if (ccwBlocked) {
+            info('Pas', 'İlk adım (saat tersi) dolu.');
+            return;
+          }
+          gChoices.innerHTML = '';
+          resolve('ccw');
+        });
+        gChoices.appendChild(ccwPath);
+
+        // If both directions are blocked, return blocked
+        if (cwBlocked && ccwBlocked) {
+          gChoices.innerHTML = '';
+          resolve('blocked');
+        }
+      });
+    }
+
+    function animateTokenTo(p, x, y, dur, done) {
+      const g = p.tokenEl;
+      const m = g.transform.baseVal.consolidate();
+      let cx = 0,
+        cy = 0;
+      if (m) {
+        const t = m.matrix;
+        cx = t.e;
+        cy = t.f
+      }
+      const dx = x - cx,
+        dy = y - cy;
+      const t0 = performance.now();
+
+      function frame(t) {
+        const k = Math.min(1, (t - t0) / dur);
+        const e = 1 - Math.pow(1 - k, 3);
+        gTranslate(g, cx + dx * e, cy + dy * e);
+        if (k < 1) requestAnimationFrame(frame);
+        else {
+          layoutTokens();
+          done()
+        }
+      }
+      requestAnimationFrame(frame)
+    }
+
+    function chooseFromRing(p) {
+      return new Promise(resolve => {
+        gChoices.innerHTML = '';
+        const laneId = ENTRY_LOOKUP[p.pos];
+        if (laneId == null || laneId === undefined) {
+          resolve('ring');
+          return
+        }
+        const hasAllBadges = p.badges && p.badges.size >= 6;
+        const nextIdx = (p.pos + 1) % points.length;
+        const ringBlocked = isRingOccupied(nextIdx, getIdByPlayer(p));
+        const hp = svgEl('path');
+        hp.setAttribute('d', SEG_PATH_D[nextIdx]);
+        hp.setAttribute('class', 'target');
+        if (ringBlocked) hp.setAttribute('aria-disabled', 'true');
+        hp.addEventListener('click', () => {
+          if (ringBlocked) {
+            info('Pas', 'Halka hücresi dolu.');
+            return
+          }
+          gChoices.innerHTML = '';
+          resolve('ring')
+        });
+        gChoices.appendChild(hp);
+        const s = laneGeom.lanes[laneId][0];
+        const lr = svgEl('rect');
+        lr.setAttribute('width', s.w);
+        lr.setAttribute('height', s.h);
+        lr.setAttribute('class', 'target');
+        const deg = s.theta * 180 / Math.PI;
+        lr.setAttribute('transform', `translate(${s.cx},${s.cy}) rotate(${deg}) translate(${-s.w/2},${-s.h/2})`);
+        const laneBlocked = isLaneOccupied(laneId, 1, getIdByPlayer(p));
+        const laneDisabled = laneBlocked || !hasAllBadges;
+        if (laneDisabled) lr.setAttribute('aria-disabled', 'true');
+        lr.addEventListener('click', () => {
+          if (!hasAllBadges) {
+            info('Engelli', 'Merkeze girmek için 6 rozet gerekir.');
+            return
+          }
+          if (laneBlocked) {
+            info('Pas', 'Şerit girişi dolu.');
+            return
+          }
+          gChoices.innerHTML = '';
+          resolve('lane')
+        });
+        gChoices.appendChild(lr);
+
+        // Ayrıca bir ileri halkayı göstermek yerine gerçek ileri konumu hesapla ve onu vurgula
+        // Çünkü halka merkezleri kaydırılmış (RING_ROT) olduğundan indeksle sadece +1 yetmeyebilir
+        // Ancak görsel uyum için mevcut +1 korunuyor; gerekirse burada açı tabanlı hesaplama kullanılabilir.
+      })
+    }
+
+         /**
+      * Show center exit choices - player can exit from any lane and move remaining steps
+      * @param {Object} player - Player object
+      * @param {number} steps - Number of steps to move
+      * @returns {Promise<Object>} Choice object {laneId, remainingSteps}
+      */
+     function chooseFromCenter(player, steps) {
+       return new Promise(resolve => {
+         gChoices.innerHTML = '';
+         const choices = [];
+         
+         // For each lane, calculate where player would end up after exiting and moving remaining steps
+         for (let laneId = 0; laneId < LANE_COUNT; laneId++) {
+           const entryIdx = ENTRY_INDEXES[laneId];
+           const remainingSteps = steps - (LANE_STEPS + 1); // LANE_STEPS + 1 step to reach ring
+           
+           if (steps <= LANE_STEPS) {
+             // Player will stop in the lane, show lane position
+             const depth = LANE_STEPS - steps + 1;
+             const s = laneGeom.lanes[laneId][depth - 1];
+             const lr = svgEl('rect');
+             lr.setAttribute('width', s.w);
+             lr.setAttribute('height', s.h);
+             lr.setAttribute('class', 'target');
+             const deg = s.theta * 180 / Math.PI;
+             lr.setAttribute('transform', `translate(${s.cx},${s.cy}) rotate(${deg}) translate(${-s.w/2},${-s.h/2})`);
+             const laneBlocked = isLaneOccupied(laneId, depth, getIdByPlayer(player));
+             if (laneBlocked) lr.setAttribute('aria-disabled', 'true');
+             lr.addEventListener('click', () => {
+               if (laneBlocked) {
+                 info('Pas', 'Şerit dolu.');
+                 return;
+               }
+               gChoices.innerHTML = '';
+               resolve({ laneId, stopsInLane: true, depth });
+             });
+             gChoices.appendChild(lr);
+             if (!laneBlocked) choices.push({ laneId, stopsInLane: true, depth });
+           } else if (remainingSteps <= 0) {
+             // Just exit to ring entry point
+             const blocked = isRingOccupied(entryIdx, getIdByPlayer(player));
+             const hp = svgEl('path');
+             hp.setAttribute('d', SEG_PATH_D[entryIdx]);
+             hp.setAttribute('class', 'target');
+             if (blocked) hp.setAttribute('aria-disabled', 'true');
+             hp.addEventListener('click', () => {
+               if (blocked) {
+                 info('Pas', 'Bu çıkış dolu.');
+                 return;
+               }
+               gChoices.innerHTML = '';
+               resolve({ laneId, remainingSteps: 0 });
+             });
+             gChoices.appendChild(hp);
+             if (!blocked) choices.push({ laneId, remainingSteps: 0 });
+           } else {
+             // Show both clockwise and counterclockwise options from entry point
+             const cwTarget = (entryIdx + remainingSteps) % BOARD.segments;
+             const ccwTarget = (entryIdx - remainingSteps + BOARD.segments) % BOARD.segments;
+             
+             // Clockwise option
+             const cwBlocked = isRingOccupied(cwTarget, getIdByPlayer(player));
+             const cwPath = svgEl('path');
+             cwPath.setAttribute('d', SEG_PATH_D[cwTarget]);
+             cwPath.setAttribute('class', 'target');
+             if (cwBlocked) cwPath.setAttribute('aria-disabled', 'true');
+             cwPath.addEventListener('click', () => {
+               if (cwBlocked) {
+                 info('Pas', 'Saat yönü dolu.');
+                 return;
+               }
+               gChoices.innerHTML = '';
+               resolve({ laneId, remainingSteps, direction: 'cw' });
+             });
+             gChoices.appendChild(cwPath);
+             if (!cwBlocked) choices.push({ laneId, remainingSteps, direction: 'cw' });
+             
+             // Counterclockwise option
+             const ccwBlocked = isRingOccupied(ccwTarget, getIdByPlayer(player));
+             const ccwPath = svgEl('path');
+             ccwPath.setAttribute('d', SEG_PATH_D[ccwTarget]);
+             ccwPath.setAttribute('class', 'target');
+             if (ccwBlocked) ccwPath.setAttribute('aria-disabled', 'true');
+             ccwPath.addEventListener('click', () => {
+               if (ccwBlocked) {
+                 info('Pas', 'Saat tersi dolu.');
+                 return;
+               }
+               gChoices.innerHTML = '';
+               resolve({ laneId, remainingSteps, direction: 'ccw' });
+             });
+             gChoices.appendChild(ccwPath);
+             if (!ccwBlocked) choices.push({ laneId, remainingSteps, direction: 'ccw' });
+           }
+         }
+         
+         if (choices.length === 0) {
+           resolve('blocked');
+         }
+       });
+  }
+
+  // ======= MODAL / TIMER / STRIP =======
+    const Q_BANK = {
+      science: [{
+        q: 'Which planet is known as the Red Planet?',
+        opts: ['Venus', 'Mars', 'Jupiter', 'Mercury'],
+        a: 1
+      }],
+      history: [{
+        q: 'The Roman Empire (West) fell in?',
+        opts: ['476', '632', '1066', '1492'],
+        a: 0
+      }],
+      art: [{
+        q: 'Mona Lisa was painted by…',
+        opts: ['Michelangelo', 'Raphael', 'Da Vinci', 'Van Gogh'],
+        a: 2
+      }],
+      sports: [{
+        q: 'Soccer team players on field?',
+        opts: ['9', '10', '11', '12'],
+        a: 2
+      }],
+      geography: [{
+        q: 'Capital of Japan?',
+        opts: ['Kyoto', 'Tokyo', 'Osaka', 'Nagoya'],
+        a: 1
+      }],
+      entertainment: [{
+        q: '“May the Force be with you” film?',
+        opts: ['Star Trek', 'Star Wars', 'Matrix', 'Avatar'],
+        a: 1
+      }]
+    };
+    async function askQuestion(category, color) {
+      const m = sel('#qModal');
+      const qb = Q_BANK[category] || Q_BANK.science;
+      const item = qb[Math.floor(Math.random() * qb.length)];
+      
+      // Set category image
+      const categoryImage = sel('#categoryImage');
+      categoryImage.src = `img/${category}.jpg`;
+      categoryImage.alt = category.toUpperCase();
+      categoryImage.style.display = 'block';
+      
+
+      sel('#qText').textContent = item.q;
+      sel('#qOpts').innerHTML = '';
+      const feedback = sel('#qFeedback');
+      feedback.textContent = '';
+      feedback.className = 'q-feedback';
+      item.opts.forEach((t, i) => {
+        const lab = document.createElement('label');
+        lab.innerHTML = `<input type="radio" name="answer" value="${i}"> <span>${t}</span>`;
+        sel('#qOpts').appendChild(lab)
+      });
+      sel('#qSubmit').onclick = e => {
+        e.preventDefault();
+        const c = sel('#qOpts input[name="answer"]:checked');
+        if (!c) {
+          const feedback = sel('#qFeedback');
+          feedback.className = 'q-feedback';
+          feedback.textContent = '⚠️ Lütfen bir seçenek seç!';
+          feedback.classList.add('wrong');
+          setTimeout(() => feedback.classList.add('show'), 50);
+          return
+        }
+        const ok = Number(c.value) === item.a;
+        const feedback = sel('#qFeedback');
+        
+        // Reset classes and styles
+        feedback.className = 'q-feedback';
+        feedback.style.color = '';
+        
+        // Set content and classes
+        feedback.textContent = ok ? '✨ Harika! Rozet kazandın!' : '💔 Yanlış cevap, tekrar dene!';
+        feedback.classList.add(ok ? 'correct' : 'wrong');
+        
+        // Show with animation
+        setTimeout(() => feedback.classList.add('show'), 50);
+        
+        if (ok) {
+          add_badge_to_player(color, category);
+          add_gold(10);
+        }
+        stop_modal_timer();
+        setTimeout(() => m.close(), 1500)
+      };
+      // Start modal countdown (15s)
+      start_modal_timer(15);
+      m.showModal()
+    }
+
+    function info(title, text) {
+      const m = sel('#qModal');
+      
+      // Hide category image for info messages
+      const categoryImage = sel('#categoryImage');
+      categoryImage.style.display = 'none';
+      
+
+      sel('#qText').textContent = text;
+      sel('#qOpts').innerHTML = '';
+      sel('#qFeedback').textContent = '';
+      sel('#qSubmit').onclick = e => {
+        e.preventDefault();
+        stop_modal_timer();
+        m.close()
+      };
+      stop_modal_timer();
+      m.showModal()
+    }
+
+    function start_timer(s) {
+      stop_timer();
+      timerEnd = Date.now() + s * 1000;
+      tick();
+      timerId = setInterval(tick, 200)
+    }
+
+    function stop_timer() {
+      if (timerId) clearInterval(timerId);
+      timerId = null;
+      updTimer(0)
+    }
+
+    function tick() {
+      const left = Math.max(0, timerEnd - Date.now());
+      updTimer(left);
+      if (left <= 0 && timerId) {
+        clearInterval(timerId);
+        timerId = null
+      }
+    }
+
+    function updTimer(ms) {
+      const s = Math.ceil(ms / 1000);
+      const mm = String(Math.floor(s / 60)).padStart(2, '0');
+      const ss = String(s % 60).padStart(2, '0');
+      const hud = sel('#timerText');
+      if (hud) hud.textContent = `${mm}:${ss}`
+    }
+
+    // ===== Modal Timer =====
+    let modalTimerId = null, modalTimerEnd = 0;
+    function start_modal_timer(seconds) {
+      stop_modal_timer();
+      modalTimerEnd = Date.now() + seconds * 1000;
+      const tickModal = () => {
+        const left = Math.max(0, modalTimerEnd - Date.now());
+        const s = Math.ceil(left / 1000);
+        const mm = String(Math.floor(s / 60)).padStart(2, '0');
+        const ss = String(s % 60).padStart(2, '0');
+        const el = sel('#modalTimerText');
+        if (el) el.textContent = `${mm}:${ss}`;
+        if (left <= 0) {
+          stop_modal_timer();
+        }
+      };
+      tickModal();
+      modalTimerId = setInterval(tickModal, 250);
+    }
+    function stop_modal_timer() {
+      if (modalTimerId) clearInterval(modalTimerId);
+      modalTimerId = null;
+    }
+
+    // ===== Gold HUD =====
+    let GOLD = 0;
+    function set_gold(v) {
+      GOLD = Math.max(0, Math.floor(v));
+      const el = sel('#goldText');
+      if (el) el.textContent = String(GOLD);
+    }
+    function add_gold(inc) { set_gold(GOLD + (inc || 0)); }
+
+    function updateCurrentPlayer() {
+      // Remove current class from all cards and pawns
+      document.querySelectorAll('.player-card').forEach(card => {
+        card.classList.remove('current', 'current-player');
+      });
+      document.querySelectorAll('.pawn-token').forEach(pawn => {
+        pawn.classList.remove('current-player');
+      });
+      
+      // Hide all glow effects
+      Object.values(PLAYERS).forEach(player => {
+        if (player.glowEl) {
+          player.glowEl.style.display = 'none';
+        }
+      });
+      
+      // Add current class to active player card
+      const currentCard = sel(`#pc-${CURRENT}`);
+      if (currentCard) {
+        currentCard.classList.add('current', 'current-player');
+      }
+      
+      // Add glow effect to current player's pawn
+      const currentPlayer = PLAYERS[CURRENT];
+      if (currentPlayer) {
+        if (currentPlayer.bodyEl) {
+          currentPlayer.bodyEl.classList.add('current-player');
+        }
+        if (currentPlayer.glowEl) {
+          currentPlayer.glowEl.style.display = 'block';
+        }
+      }
+    }
+
+    function renderPlayersStrip() {
+      const strip = sel('#playersStrip');
+      strip.innerHTML = '';
+      for (const id of Object.keys(PLAYERS)) {
+        const p = PLAYERS[id];
+        const card = document.createElement('div');
+        card.className = 'player-card';
+        if (id === CURRENT) card.classList.add('current');
+        card.id = `pc-${id}`;
+        
+        // Avatar with background image
+        const avatar = document.createElement('div');
+        avatar.className = 'player-avatar';
+        const avatarMap = {
+          '#0a84ff': 'img/avatar-blue.png',
+          '#34c759': 'img/avatar-green.png',
+          '#ff3b30': 'img/avatar-red.png',
+          '#ffd400': 'img/avatar-yellow.png'
+        };
+        avatar.style.backgroundImage = `url(${avatarMap[p.color] || 'user.svg'})`;
+        
+        const name = document.createElement('div');
+        name.className = 'player-name';
+        name.textContent = id;
+        
+        const badges = document.createElement('div');
+        badges.className = 'player-badges';
+        badges.id = `badges-${id}`;
+        card.appendChild(avatar);
+        card.appendChild(name);
+        card.appendChild(badges);
+        strip.appendChild(card);
+        renderBadgeRow(id)
+      }
+    }
+
+    function renderBadgeRow(id) {
+      const row = sel(`#badges-${id}`);
+      if (!row) return;
+      row.innerHTML = '';
+      [...PLAYERS[id].badges].forEach(cat => {
+        const b = document.createElement('div');
+        b.className = 'badge';
+        b.style.background = COL[cat] || '#fff';
+        row.appendChild(b)
+      })
+    }
+
+    function add_badge_to_player(color, cat) {
+      const p = PLAYERS[color];
+      if (!p) return;
+      p.badges.add(cat);
+      renderHalo(p);
+      renderBadgeRow(color)
+    }
+
+    function set_player_avatar(color, url) {
+      const p = PLAYERS[color];
+      if (!p) return;
+      p.avatar = url;
+      renderPlayersStrip()
+    }
+
+    let timerId = null,
+      timerEnd = 0;
+
+    function set_current_player(c) {
+      if (PLAYERS[c]) {
+        CURRENT = c;
+        updateTurnInd();
+        updateCurrentPlayer();
+      }
+    }
+
+    function next_player() {
+      const ids = Object.keys(PLAYERS);
+      const i = (ids.indexOf(CURRENT) + 1) % ids.length;
+      set_current_player(ids[i])
+    }
+
+    function reset_game() {
+      // Generate new random board layout
+      boardCats = generateBoardCategories();
+      
+      // Rebuild geometry with new categories
+      laneGeom = buildLaneGeometry();
+      drawBoard();
+      drawLanes();
+      
+      // Reset players
+      for (const id of Object.keys(PLAYERS)) {
+        const p = PLAYERS[id];
+        p.state = 'center';
+        p.pos = 0;
+        p.lane = null;
+        p.badges.clear()
+      }
+      layoutTokens();
+      set_current_player('red');
+      set_dice(1);
+      stop_timer();
+      renderPlayersStrip()
+    }
+
+    function updateTurnInd() {
+      sel('#turnInd').textContent = `Sıradaki: ${CURRENT}`
+    }
+
+  // expose API
+    window.set_dice = set_dice;
+    window.roll_dice = roll_dice;
+    window.start_timer = start_timer;
+    window.stop_timer = stop_timer;
+    window.set_gold = set_gold;
+    window.add_gold = add_gold;
+    window.set_current_player = set_current_player;
+    window.next_player = next_player;
+    window.reset_game = reset_game;
+    window.add_badge_to_player = add_badge_to_player;
+    window.set_player_avatar = set_player_avatar;
+    window.move_player = window.move_player;
+
+    // ======= UI EVENT HANDLERS =======
+    sel('#btnRoll').addEventListener('click', async () => {
+      const diceValue = roll_dice();
+      const result = await window.move_player(CURRENT, diceValue);
+
+      // Only advance turn if player doesn't get to roll again
+      if (!result || !result.rollAgain) {
+        next_player();
+      }
+    });
+
+    sel('#die').addEventListener('click', async () => {
+      const diceValue = roll_dice();
+      const result = await window.move_player(CURRENT, diceValue);
+
+      // Only advance turn if player doesn't get to roll again
+      if (!result || !result.rollAgain) {
+        next_player();
+      }
+    });
+
+  // ====== SELF-TESTS ======
+    (function selfTests() {
+      try {
+        console.group('%cSelf-tests', 'color:#7cf');
+        set_dice(6);
+        const pips = sel('#pipGroup').childElementCount;
+        console.assert(pips === 6, 'set_dice should render 6 pips');
+        reset_game();
+        PLAYERS.red.state = 'ring';
+        PLAYERS.red.pos = 0;
+        layoutTokens();
+        PLAYERS.blue.state = 'ring';
+        PLAYERS.blue.pos = 0;
+        const blocked = isRingOccupied(0, 'blue');
+        console.assert(blocked === true, 'Two tokens cannot occupy same ring cell');
+        console.assert(ENTRY_INDEXES.length === 4 && LANE_STEPS === 3, 'Should be 4 lanes with 3 steps each');
+      console.groupEnd();
+      } catch (e) {
+        console.warn('Self-tests failed', e)
+      }
+  })();
+
+    (async function extendedTests() {
+      try {
+        console.group('%cExtended tests', 'color:#9f9');
+        reset_game();
+        PLAYERS.blue.state = 'lane';
+        PLAYERS.blue.lane = {
+          id: 0,
+          depth: 1,
+          dir: 'in'
+        };
+        PLAYERS.red.state = 'lane';
+        PLAYERS.red.lane = {
+          id: 0,
+          depth: 0,
+          dir: 'in'
+        };
+        let moved = await stepOnce(PLAYERS.red);
+        console.assert(moved === false, 'E1: entering blocked lane should be prevented');
+        reset_game();
+        PLAYERS.red.state = 'ring';
+        PLAYERS.red.pos = 0;
+        PLAYERS.green.state = 'ring';
+        PLAYERS.green.pos = 1;
+        moved = await stepOnce(PLAYERS.red);
+        console.assert(moved === false, 'E2: ring move blocked by occupancy');
+        reset_game();
+        PLAYERS.green.state = 'ring';
+        PLAYERS.green.pos = ENTRY_INDEXES[0];
+        PLAYERS.yellow.state = 'lane';
+        PLAYERS.yellow.lane = {
+          id: 0,
+          depth: 1,
+          dir: 'out'
+        };
+        moved = await stepOnce(PLAYERS.yellow);
+        console.assert(moved === false, 'E3: lane exit blocked by ring occupancy');
+        reset_game();
+        const p = PLAYERS.red;
+        p.state = 'lane';
+        p.lane = {
+          id: 1,
+          depth: LANE_STEPS,
+          dir: 'out'
+        };
+        for (let i = 0; i < LANE_STEPS; i++) {
+          await stepOnce(p);
+        }
+        console.assert(p.state === 'ring' && p.pos === ENTRY_INDEXES[1],
+          'E4: outward lane should exit to ring (aligned with rotation)');
+        reset_game();
+        console.groupEnd();
+      } catch (e) {
+        console.warn('Extended tests failed', e);
+      }
+  })();
+  </script>
+</body>
+
+</html>

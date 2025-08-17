@@ -1,0 +1,177 @@
+/* Game component styles */
+.board-aspect {
+  aspect-ratio: 1;
+  width: 100%;
+  height: auto;
+}
+
+.dice-container {
+  width: 40px;
+  height: 40px;
+  cursor: pointer;
+  transition: transform 0.1s ease;
+  background-color: white;
+}
+
+.dice-container:hover {
+  transform: scale(1.1);
+}
+
+.dice-container:active {
+  transform: scale(0.95);
+}
+
+.player-avatar {
+  border: 2px solid black;
+}
+
+.badge-dot {
+  border: 1px solid rgba(0, 0, 0, 0.3);
+}
+
+.pip {
+  transition: fill 0.2s ease;
+}
+
+/* Target overlays */
+.target {
+  fill: rgba(255, 255, 255, 0.001);
+  stroke: #ffffff;
+  stroke-width: 3px;
+  filter: drop-shadow(0 0 8px rgba(255,255,255,0.7));
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.target:hover {
+  fill: rgba(255, 255, 255, 0.06);
+  stroke-width: 3.5px;
+}
+
+/* HUD Styles */
+.hud-container {
+  position: relative;
+  width: 100%;
+  padding: 12px;
+  background: rgba(0, 0, 0, 0.05);
+  border-radius: 12px;
+}
+
+.corner {
+  position: absolute;
+}
+
+.corner.top-left {
+  top: 12px;
+  left: 12px;
+}
+
+.corner.top-right {
+  top: 12px;
+  right: 12px;
+}
+
+.gold {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-weight: bold;
+  color: #d4af37;
+}
+
+.coin {
+  font-size: 16px;
+}
+
+.amount {
+  font-size: 14px;
+}
+
+.current-player-indicator {
+  font-weight: bold;
+}
+
+/* Player and token styles */
+.player-token {
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transform-origin: center;
+}
+
+.player-token-body {
+  transition: all 0.2s ease;
+}
+
+.player-token-current {
+  filter: drop-shadow(0 0 8px rgba(255,255,255,0.6));
+}
+
+.badge-halo {
+  transition: all 0.2s ease;
+  opacity: 0.9;
+}
+
+/* Player card colors - using CSS custom properties for dynamic colors */
+.player-red { --player-color: #ef4444; }
+.player-blue { --player-color: #3b82f6; }
+.player-green { --player-color: #10b981; }
+.player-yellow { --player-color: #f59e0b; }
+
+/* Token shadow and 3D effects */
+.token-shadow {
+  transition: all 0.2s ease;
+}
+
+.player-token:hover .token-shadow {
+  opacity: 0.4;
+  transform: translateY(1px);
+}
+
+/* Board styling updates to match dark theme */
+.board-container {
+  position: relative;
+  background: #202231;
+  border-radius: 16px;
+  padding: 8px;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.35);
+}
+
+.board-container::before {
+  content: "";
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  bottom: 8px;
+  left: 8px;
+  background-image: url('/img/bg.png');
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  opacity: 0.05;
+  border-radius: 16px;
+  pointer-events: none;
+}
+
+/* Dice styling improvements */
+.dice-container {
+  background: linear-gradient(145deg, #ffffff, #f0f0f0);
+  border-radius: 12px;
+  box-shadow: 
+    inset 2px 2px 5px rgba(0,0,0,0.1),
+    inset -2px -2px 5px rgba(255,255,255,0.8),
+    2px 2px 8px rgba(0,0,0,0.15);
+}
+
+.dice-container:hover {
+  transform: scale(1.05) rotate(2deg);
+  box-shadow: 
+    inset 2px 2px 5px rgba(0,0,0,0.15),
+    inset -2px -2px 5px rgba(255,255,255,0.9),
+    4px 4px 12px rgba(0,0,0,0.2);
+}
+
+.dice-container:active {
+  transform: scale(0.98);
+  box-shadow: 
+    inset 3px 3px 6px rgba(0,0,0,0.2),
+    inset -1px -1px 3px rgba(255,255,255,0.7);
+}

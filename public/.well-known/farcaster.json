@@ -1,0 +1,36 @@
+{
+  "frame": {
+    "name": "Trivist",
+    "version": "1",
+    "iconUrl": "https://triv.ist/icon.png",
+    "homeUrl": "https://triv.ist",
+    "imageUrl": "https://triv.ist/screenshot.png",
+    "buttonTitle": "Play Now",
+    "splashImageUrl": "https://triv.ist/splash.png",
+    "splashBackgroundColor": "#182234",
+    "webhookUrl": "https://triv.ist/api/webhook",
+    "heroImageUrl": "https://www.triv.ist/hero.png",
+    "screenshotUrls": [
+      "https://triv.ist/screenshot.png"
+    ],
+    "primaryCategory": "games",
+    "description": "Trivist, the ultimate trivia challenge across six exciting categories: Science, History, Art, Sports, Geography, and Entertainment.",
+    "subtitle": "Ultimate Knowledge Showdown",
+    "tags": [
+      "gaming",
+      "trivia",
+      "fun",
+      "token",
+      "triv"
+    ],
+    "ogTitle": "Ultimate Knowledge Showdown",
+    "ogDescription": "Trivist: The Ultimate Knowledge Showdown"
+  },
+  
+    "accountAssociation": {
+      "header": "eyJmaWQiOjExOTA0NDMsInR5cGUiOiJjdXN0b2R5Iiwia2V5IjoiMHgwRTVDYzA3NmI5YTI1NTkyQzJiRTQ2QzVhYTg3MTUyMzBGMjlFNjVEIn0",
+      "payload": "eyJkb21haW4iOiJ0cml2LmlzdCJ9",
+      "signature": "MHgwZWExYWFjZGFiYTFjOTM1YTNkNzFkZDNhNmI5NGEyMzgxMmMyZmNjZTgwNjBlODNhNWY3ZmQzZGViMjY4ODM5NTQyMWZkODE3YzM3N2Y3Zjk5ZTI1YzU2Nzg1OGFiZjVjMDE2ZGE3MmViZTE0MjIwNDkxMGI0YTQ4NGRjNTZiZDFi"
+    }
+  
+}
