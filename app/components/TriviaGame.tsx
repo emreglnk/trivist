@@ -9,8 +9,8 @@ import GameBoard, { BoardOverlay } from "./GameBoard";
 import GameHUD from "./GameHUD";
 import QuestionModal from "./QuestionModal";
 import WalletButton from "./WalletButton";
+import WalletBadge from "./WalletBadge";
 import Image from "next/image";
-
 
 interface QuestionPayload {
   category: string;
@@ -40,93 +40,76 @@ export default function TriviaGame() {
   const [isBusy, setIsBusy] = useState(false);
   const [isMultiplayer] = useState(true);
 
-  // WebSocket event handlers (native WS)
+  // Realtime minimal events via Socket.IO
   useEffect(() => {
-    const socket = realtimeGame.socket;
+    const socket = realtimeGame.socket as any;
     if (!socket) return;
-
-    const onMessage = (evt: MessageEvent) => {
-      try {
-        const data = JSON.parse(typeof evt.data === 'string' ? evt.data : '');
-        switch (data.type) {
-          case 'diceRolled': {
-            const { player, value } = data;
-            console.log(`Player ${player} rolled ${value}, assignedColor: ${realtimeGame.assignedColor}`);
-            if (isMultiplayer && realtimeGame.assignedColor && player === realtimeGame.assignedColor) {
-              console.log(`Starting movement animation for ${value} steps`);
-              (async () => {
-                try {
-                  await performAnimatedMovementMultiplayer(value);
-                  console.log(`Movement animation completed`);
-                } catch (error) {
-                  console.error('Movement error:', error);
-                } finally {
-                  setIsBusy(false);
-                }
-              })();
-            } else {
-              console.log(`Not my turn or not assigned. isMultiplayer: ${isMultiplayer}, assignedColor: ${realtimeGame.assignedColor}, player: ${player}`);
-              setIsBusy(false);
-            }
-            break;
-          }
-          case 'gameWon': {
-            const { playerName } = data;
-            alert(`🎉 ${playerName} won the game!`);
-            break;
-          }
-          case 'lobbyUpdate': {
-            console.log('Lobby update', data);
-            break;
-          }
-          case 'questionOpened': {
-            const payload: QuestionPayload = data;
-            const isCurrentLocalPlayer = isMultiplayer && !!realtimeGame.assignedColor && payload.askedBy === realtimeGame.assignedColor;
-            setQuestionModal({
-              isOpen: true,
-              category: payload.category,
-              readOnly: isMultiplayer ? !isCurrentLocalPlayer : false,
-              injectedQuestion: { q: payload.question, opts: payload.options, a: -1 },
-              askedBy: payload.askedBy,
-            });
-            break;
-          }
-          case 'answerResult': {
-            const payload: AnswerResultPayload = data;
-            const name = payload.answeredBy;
-            const msg = payload.correct ? 'answered correctly!' : 'answered wrong.';
-            console.log(`Player ${name} ${msg}`);
-            break;
-          }
-          case 'error': {
-            console.error('Game error:', data.error);
-            alert(`Error: ${data.error}`);
-            setIsBusy(false);
-            break;
-          }
-          default:
-            break;
-        }
-      } catch (e) {
-        console.error('Invalid WS message', e);
-      }
-    };
-
-    socket.addEventListener('message', onMessage);
+    const onDiceRolled = () => setIsBusy(false);
+    const onGameWon = ({ playerName }: { playerName: string }) => alert(`🎉 ${playerName} won the game!`);
+    socket.on('diceRolled', onDiceRolled);
+    socket.on('gameWon', onGameWon);
     return () => {
-      socket.removeEventListener('message', onMessage);
+      socket.off('diceRolled', onDiceRolled);
+      socket.off('gameWon', onGameWon);
     };
-  }, [realtimeGame.socket, realtimeGame.assignedColor, isMultiplayer]);
+  }, [realtimeGame.socket]);
+
+  // Open question modal for everyone; only current player can answer
+  useEffect(() => {
+    if (!realtimeGame.questionMeta) return;
+    const askedBy = realtimeGame.questionMeta.askedBy as any;
+    const isCurrentLocalPlayer = isMultiplayer && !!realtimeGame.assignedColor && askedBy === realtimeGame.assignedColor;
+    const category = realtimeGame.questionMeta.category;
+    if (category === 'roll') {
+      // Special tile: roll again. No modal; same player keeps the turn.
+      setTimeout(() => alert('🎲 Roll Again!'), 50);
+      setQuestionModal({ isOpen: false, category: '', readOnly: false, injectedQuestion: null, askedBy });
+      return;
+    }
+    setQuestionModal({
+      isOpen: true,
+      category,
+      readOnly: isMultiplayer ? !isCurrentLocalPlayer : false,
+      injectedQuestion: null,
+      askedBy,
+    });
+  }, [realtimeGame.questionMeta, realtimeGame.assignedColor, isMultiplayer]);
+
+  // Show selectable move options overlay when it's our turn
+  useEffect(() => {
+    if (!realtimeGame.moveOptions || !realtimeGame.gameState) { setOverlay(null); return; }
+    if (!realtimeGame.assignedColor || realtimeGame.gameState.currentPlayer !== (realtimeGame.assignedColor as any)) { setOverlay(null); return; }
+    // Build overlay targets from options' last step
+    const targets = realtimeGame.moveOptions.map((opt) => {
+      const last = (opt.path && opt.path.length > 0) ? opt.path[opt.path.length - 1] : null;
+      if (!last) return null;
+      if (last.state === 'ring') return { type: 'ring', pos: last.pos, optionId: opt.id };
+      if (last.state === 'lane') return { type: 'lane', laneId: last.lane.id, depth: last.lane.depth, optionId: opt.id };
+      return null;
+    }).filter(Boolean) as any[];
+    const ov: BoardOverlay = {
+      type: 'select',
+      targets: targets.map(t => ({ ...t })),
+      onSelect: (t: any) => {
+        const matched = targets.find(x => (x.type === t.type && (x.pos === t.pos || (x.laneId === t.laneId && x.depth === t.depth))));
+        if (matched && matched.optionId) {
+          realtimeGame.chooseMove(matched.optionId);
+          setOverlay(null);
+        }
+      }
+    } as any;
+    setOverlay(ov);
+  }, [realtimeGame.moveOptions, realtimeGame.gameState, realtimeGame.assignedColor]);
 
   // Join quick matchmaking when multiplayer mode is enabled
   useEffect(() => {
     if (isMultiplayer && realtimeGame.isConnected && !realtimeGame.gameState) {
       realtimeGame.joinRoom('auto', {
-        address: wallet.address || '0x1234...',
-        signature: 'dummy_signature' // This would come from wallet signing
+        address: wallet.address || '',
+        signature: ''
       });
     }
-  }, [isMultiplayer, realtimeGame.isConnected, wallet.address]);
+  }, [isMultiplayer, realtimeGame.isConnected, realtimeGame.gameState, wallet.address]);
 
   const handleRollDice = useCallback(async () => {
     if (isBusy || questionModal.isOpen || overlay) return;
@@ -423,11 +406,12 @@ export default function TriviaGame() {
             }
             setQuestionModal({ isOpen: true, category, readOnly: false, injectedQuestion: injected, askedBy: realtimeGame.assignedColor });
             try {
-              if (realtimeGame.socket.readyState === WebSocket.OPEN) {
+              const s: any = realtimeGame.socket;
+              if (s && s.connected) {
                 const payload = injected
-                  ? { type: 'questionOpened', category, question: injected.q, options: injected.opts }
-                  : { type: 'questionOpened', category, question: 'Question', options: [] };
-                realtimeGame.socket.send(JSON.stringify(payload));
+                  ? { category, question: injected.q, options: injected.opts }
+                  : { category, question: 'Question', options: [] };
+                s.emit('questionOpened', payload);
               }
             } catch {}
           } catch {
@@ -572,7 +556,10 @@ export default function TriviaGame() {
       <div className="space-y-3">
         {/* Wallet Connection */}
         <div className="flex items-center justify-between p-3 bg-slate-800/50 rounded-lg border border-white/10">
-          <span className="text-white text-sm font-medium">Wallet</span>
+          <div className="flex items-center gap-2">
+            <span className="text-white text-sm font-medium">Wallet</span>
+            <WalletBadge />
+          </div>
           <WalletButton />
         </div>
 

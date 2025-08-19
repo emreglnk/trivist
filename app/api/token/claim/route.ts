@@ -1,18 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createPublicClient, createWalletClient, http, isAddress } from 'viem';
-import { baseSepolia } from 'viem/chains';
+import { base, baseSepolia } from 'viem/chains';
 import { privateKeyToAccount } from 'viem/accounts';
 // Ensure Node.js runtime for viem compatibility
 export const runtime = 'nodejs';
 
 // Contract configuration
-const TRIV_TOKEN_ADDRESS = process.env.TRIV_TOKEN_ADDRESS as `0x${string}` || '0x3129DD4d0454E94fcC98C7880A730038fD325063';
+const TRIV_TOKEN_ADDRESS = (process.env.TRIV_TOKEN_ADDRESS as `0x${string}`) || '0x0000000000000000000000000000000000000000';
 const BASE_RPC_URL = process.env.NEXT_PUBLIC_RPC_URL || 'https://sepolia.base.org';
+const CHAIN_ID = Number(process.env.NEXT_PUBLIC_CHAIN_ID || 84532); // 8453 mainnet, 84532 sepolia
+const CHAIN = CHAIN_ID === 8453 ? base : baseSepolia;
 
 // Check if we should use mock or real contract
-const USE_MOCK = !process.env.TRIV_TOKEN_ADDRESS || 
-                 process.env.TRIV_TOKEN_ADDRESS === '0x0000000000000000000000000000000000000000' ||
-                 !process.env.PRIVATE_KEY;
+const USE_MOCK = !process.env.TRIV_TOKEN_ADDRESS ||
+  process.env.TRIV_TOKEN_ADDRESS === '0x0000000000000000000000000000000000000000' ||
+  !process.env.PRIVATE_KEY;
 
 // Mock token system for development
 interface MockUserStats {
@@ -44,7 +46,7 @@ function canClaimDaily(user: MockUserStats): boolean {
 
 // Real contract clients
 const publicClient = createPublicClient({
-  chain: baseSepolia,
+  chain: CHAIN,
   transport: http(BASE_RPC_URL)
 });
 
@@ -61,11 +63,13 @@ try {
   account = null;
 }
 
-const walletClient = account ? createWalletClient({
-  account,
-  chain: baseSepolia,
-  transport: http(BASE_RPC_URL)
-}) : null;
+const walletClient = account
+  ? createWalletClient({
+      account,
+      chain: CHAIN,
+      transport: http(BASE_RPC_URL),
+    })
+  : null;
 
 const TRIV_TOKEN_ABI = [
   {

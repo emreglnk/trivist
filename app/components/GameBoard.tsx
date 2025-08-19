@@ -20,6 +20,16 @@ type RingOrLaneOverlay = {
   laneDisabled?: boolean;
 };
 
+type SelectTarget =
+  | { type: 'ring'; pos: number; optionId?: string; disabled?: boolean }
+  | { type: 'lane'; laneId: number; depth: number; optionId?: string; disabled?: boolean };
+
+type SelectOverlay = {
+  type: 'select';
+  targets: SelectTarget[];
+  onSelect?: (t: SelectTarget) => void;
+};
+
 type CenterExitOption =
   | { kind: 'lane'; laneId: number; depth: number; disabled?: boolean }
   | { kind: 'ring'; laneId: number; index: number; remainingSteps?: number; direction?: 'cw' | 'ccw'; disabled?: boolean };
@@ -29,7 +39,7 @@ type CenterExitOverlay = {
   options: CenterExitOption[];
 };
 
-export type BoardOverlay = DirectionChoiceOverlay | RingOrLaneOverlay | CenterExitOverlay | null;
+export type BoardOverlay = DirectionChoiceOverlay | RingOrLaneOverlay | CenterExitOverlay | SelectOverlay | null;
 
 interface GameBoardProps {
   players: Record<string, Player>;
@@ -412,6 +422,51 @@ export default function GameBoard({ players, categories, overlay, onOverlayChoic
                         className="target"
                         opacity={opt.disabled ? 0.4 : 1}
                         onClick={() => !opt.disabled && onOverlayChoice && onOverlayChoice(opt)}
+                      />
+                    );
+                  }
+                  return null;
+                })}
+              </>
+            )}
+
+            {overlay.type === 'select' && (
+              <>
+                {(overlay as SelectOverlay).targets.map((t, i) => {
+                  if (t.type === 'ring') {
+                    return (
+                      <path
+                        key={`sel-ring-${i}`}
+                        d={segments[t.pos]}
+                        className="target"
+                        opacity={t.disabled ? 0.4 : 1}
+                        onClick={() => {
+                          if (t.disabled) return;
+                          const ov = overlay as SelectOverlay;
+                          if (ov.onSelect) ov.onSelect(t);
+                          else if (onOverlayChoice) onOverlayChoice(t);
+                        }}
+                      />
+                    );
+                  } else if (t.type === 'lane') {
+                    const s = laneGeometry[t.laneId]?.[t.depth - 1];
+                    if (!s) return null;
+                    return (
+                      <rect
+                        key={`sel-lane-${i}`}
+                        x={s.x - s.width / 2}
+                        y={s.y - s.height / 2}
+                        width={s.width}
+                        height={s.height}
+                        className="target"
+                        transform={`rotate(${(s.theta * 180) / Math.PI}, ${s.x}, ${s.y})`}
+                        opacity={t.disabled ? 0.4 : 1}
+                        onClick={() => {
+                          if (t.disabled) return;
+                          const ov = overlay as SelectOverlay;
+                          if (ov.onSelect) ov.onSelect(t);
+                          else if (onOverlayChoice) onOverlayChoice(t);
+                        }}
                       />
                     );
                   }

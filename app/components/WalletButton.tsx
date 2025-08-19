@@ -3,13 +3,17 @@
 import { useWallet } from '../hooks/useWallet';
 
 export default function WalletButton() {
-  const { address, isConnected, isConnecting, connect, disconnect } = useWallet();
+  const { address, username, isConnected, isConnecting, connect, disconnect } = useWallet();
 
-  if (isConnected && address) {
+  if (isConnected && (username || address)) {
+    const label = username ? `${username}` : `${address!.slice(0, 6)}...${address!.slice(-4)}`;
     return (
       <div className="flex items-center gap-2">
-        <div className="px-3 py-1 bg-green-600/20 text-green-300 rounded-lg text-sm font-mono">
-          {address.slice(0, 6)}...{address.slice(-4)}
+        <div
+          className="px-3 py-1 bg-green-600/20 text-green-300 rounded-lg text-sm font-mono"
+          title={address || undefined}
+        >
+          {label}
         </div>
         <button
           onClick={disconnect}

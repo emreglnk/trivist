@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from 'react';
+import { io, Socket } from 'socket.io-client';
 
 interface Player {
   id: string;
@@ -35,134 +36,109 @@ interface GameState {
 }
 
 interface UseRealtimeGameReturn {
-  socket: WebSocket | null;
+  socket: Socket | null;
   gameState: GameState | null;
   isConnected: boolean;
   assignedColor?: 'red' | 'green' | 'blue' | 'yellow';
   lobby?: { connected: number; required: number; status: GameState['gameStatus'] };
+  moveOptions?: { id: string; label: string; path: any[]; meta?: any }[];
+  questionMeta?: { category: string; askedBy: 'red'|'green'|'blue'|'yellow' };
   joinRoom: (roomId: string, playerData: { address: string; signature: string }) => void;
   rollDice: () => void;
   movePlayer: (newPosition: { state: string; pos: number; lane?: any }) => void;
+  chooseMove: (optionId: string) => void;
   answerQuestion: (correct: boolean) => void;
   leaveRoom: () => void;
 }
 
 export function useRealtimeGame(): UseRealtimeGameReturn {
-  const [socket, setSocket] = useState<WebSocket | null>(null);
+  const [socket, setSocket] = useState<Socket | null>(null);
   const [gameState, setGameState] = useState<GameState | null>(null);
   const [isConnected, setIsConnected] = useState(false);
   const [assignedColor, setAssignedColor] = useState<'red' | 'green' | 'blue' | 'yellow' | undefined>(undefined);
   const [lobby, setLobby] = useState<{ connected: number; required: number; status: GameState['gameStatus'] } | undefined>(undefined);
+  const [moveOptions, setMoveOptions] = useState<{ id: string; label: string; path: any[]; meta?: any }[] | undefined>(undefined);
+  const [questionMeta, setQuestionMeta] = useState<{ category: string; askedBy: 'red'|'green'|'blue'|'yellow' } | undefined>(undefined);
 
   useEffect(() => {
-    // Build WS URL: prefer env, otherwise same-origin /api/ws
-    const computeUrl = () => {
-      const env = process.env.NEXT_PUBLIC_WS_URL;
-      if (env && env.startsWith('ws')) return env;
-      if (typeof window !== 'undefined') {
-        const proto = window.location.protocol === 'https:' ? 'wss' : 'ws';
-        return `${proto}://${window.location.host}/api/ws`;
-      }
-      return '';
-    };
+    // Connect via Socket.IO through Nginx proxy (/socket.io)
+    if (typeof window === 'undefined') return;
+    const origin = window.location.origin;
+    const s = io(origin, { path: '/socket.io', transports: ['websocket'] });
 
-    const url = computeUrl();
-    if (!url) return;
+    const onConnect = () => setIsConnected(true);
+    const onDisconnect = () => setIsConnected(false);
 
-    const ws = new WebSocket(url);
+    s.on('connect', onConnect);
+    s.on('disconnect', onDisconnect);
 
-    ws.onopen = () => {
-      console.log('Connected to game server');
-      setIsConnected(true);
-    };
+    s.on('playerAssigned', (payload: { playerColor: 'red'|'green'|'blue'|'yellow'; player: any }) => {
+      setAssignedColor(payload.playerColor);
+    });
 
-    ws.onclose = () => {
-      console.log('Disconnected from game server');
-      setIsConnected(false);
-    };
+    s.on('gameState', (data: any) => {
+      setGameState({
+        id: data.id,
+        players: data.players,
+        currentPlayer: data.currentPlayer,
+        diceValue: data.diceValue,
+        gameStatus: data.gameStatus,
+        winner: data.winner,
+      });
+    });
 
-    ws.onerror = (e) => {
-      console.error('Game server error:', e);
-    };
+    s.on('lobbyUpdate', (data: any) => {
+      setLobby({ connected: data.connected, required: data.required, status: data.status });
+      setGameState(prev => prev ? { ...prev, players: data.players, gameStatus: data.status } as GameState : prev);
+    });
 
-    ws.onmessage = (evt) => {
-      try {
-        const data = JSON.parse(typeof evt.data === 'string' ? evt.data : '');
-        switch (data.type) {
-          case 'playerAssigned':
-            setAssignedColor(data.playerColor);
-            break;
-          case 'gameState':
-            setGameState({
-              id: data.id,
-              players: data.players,
-              currentPlayer: data.currentPlayer,
-              diceValue: data.diceValue,
-              gameStatus: data.gameStatus,
-              winner: data.winner,
-            });
-            break;
-          case 'lobbyUpdate':
-            setLobby({ connected: data.connected, required: data.required, status: data.status });
-            setGameState(prev => prev ? { ...prev, players: data.players, gameStatus: data.status } as GameState : prev);
-            break;
-          case 'diceRolled':
-          case 'answerResult':
-          case 'gameWon':
-          case 'questionOpened':
-            // these are informative events; gameState sync follows separately
-            break;
-          case 'error':
-            console.error('Server error:', data.error);
-            break;
-          default:
-            break;
-        }
-      } catch (err) {
-        console.error('Invalid WS message', err);
-      }
-    };
+    s.on('diceRolled', () => {/* handled via gameState sync */});
+    s.on('answerResult', () => {/* handled via gameState sync */});
+    s.on('gameWon', () => {/* handled via gameState sync */});
+    s.on('moveOptions', (payload: { options: any[]; dice: number }) => {
+      setMoveOptions(payload.options || []);
+    });
+    s.on('questionOpened', (payload: { category: string; askedBy: 'red'|'green'|'blue'|'yellow' }) => {
+      setQuestionMeta(payload);
+      // clear move options upon question opening
+      setMoveOptions(undefined);
+    });
 
-    setSocket(ws);
+    setSocket(s);
     return () => {
-      try { ws.close(); } catch {}
+      try { s.disconnect(); } catch {}
     };
   }, []);
 
   const joinRoom = useCallback((roomId: string, playerData: { address: string; signature: string }) => {
-    if (socket && socket.readyState === WebSocket.OPEN) {
-      socket.send(JSON.stringify({ type: 'quickJoin', address: playerData.address }));
-    }
+    if (socket && socket.connected) socket.emit('quickJoin', { address: playerData.address });
   }, [socket]);
 
   const rollDice = useCallback(() => {
-    if (socket && socket.readyState === WebSocket.OPEN) {
-      socket.send(JSON.stringify({ type: 'rollDice' }));
-    }
+    if (socket && socket.connected) socket.emit('rollDice');
   }, [socket]);
 
   const movePlayer = useCallback((newPosition: { state?: string; pos?: number; offset?: number; lane?: any }) => {
-    if (socket && socket.readyState === WebSocket.OPEN) {
+    if (socket && socket.connected) {
       const position: any = {};
       if (newPosition.state !== undefined) position.state = newPosition.state;
       if (newPosition.pos !== undefined) position.pos = newPosition.pos;
       if (newPosition.offset !== undefined) position.offset = newPosition.offset;
       if (newPosition.lane !== undefined) position.lane = newPosition.lane;
-      console.log('[client] Sending movePlayer:', position);
-      socket.send(JSON.stringify({ type: 'movePlayer', position }));
+      socket.emit('movePlayer', { position });
     }
+  }, [socket]);
+
+  const chooseMove = useCallback((optionId: string) => {
+    if (socket && socket.connected) socket.emit('chooseMove', { optionId });
   }, [socket]);
 
   const answerQuestion = useCallback((correct: boolean) => {
-    if (socket && socket.readyState === WebSocket.OPEN) {
-      socket.send(JSON.stringify({ type: 'answerQuestion', correct }));
-    }
+    if (socket && socket.connected) socket.emit('answerQuestion', { correct });
   }, [socket]);
 
   const leaveRoom = useCallback(() => {
-    if (socket) {
-      try { socket.close(); } catch {}
-    }
+    if (socket) try { socket.disconnect(); } catch {}
   }, [socket]);
 
   return {
@@ -171,9 +147,12 @@ export function useRealtimeGame(): UseRealtimeGameReturn {
     isConnected,
     assignedColor,
     lobby,
+    moveOptions,
+    questionMeta,
     joinRoom,
     rollDice,
     movePlayer,
+    chooseMove,
     answerQuestion,
     leaveRoom,
   };

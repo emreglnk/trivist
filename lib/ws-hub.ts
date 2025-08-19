@@ -203,6 +203,50 @@ export function bindSocketServer(io: Server) {
       
       io.to(gameId).emit("diceRolled", { player: playerColor, value: diceValue });
       io.to(gameId).emit("gameState", game);
+      // Compute and send move options to the current player only
+      try {
+        const options = computeMoveOptions(game, playerColor, diceValue);
+        socket.emit("moveOptions", { options, dice: diceValue });
+      } catch {}
+    });
+
+    socket.on("chooseMove", async ({ optionId }: { optionId: string }) => {
+      const { gameId, playerColor } = (socket.data as { gameId?: string; playerColor?: PlayerColor }) || {};
+      if (!gameId || !playerColor) return;
+      const game = games.get(gameId);
+      if (!game || game.gameStatus !== 'playing') return;
+      if (game.currentPlayer !== playerColor) { socket.emit("error", "Not your turn"); return; }
+      // Recompute options with stored dice
+      const diceValue = game.diceValue || 1;
+      let options: ReturnType<typeof computeMoveOptions> = [];
+      try { options = computeMoveOptions(game, playerColor, diceValue); } catch { options = []; }
+      const chosen = options.find(o => o.id === optionId) || options[0];
+      if (!chosen) return;
+      const player = game.players[playerColor];
+      for (const step of chosen.path) {
+        if ((step as any).state === 'ring') {
+          player.state = 'ring';
+          player.lane = null;
+          player.pos = (step as any).pos as number;
+        } else if ((step as any).state === 'lane') {
+          player.state = 'lane';
+          player.lane = { ...(step as any).lane };
+        }
+        io.to(gameId).emit("gameState", game);
+        await new Promise(r => setTimeout(r, 220));
+      }
+      // Arrival: determine category and open question for all
+      const tileCategory = (() => {
+        if (player.state === 'ring') {
+          const idx = player.pos % (game.boardCategories.length || 24);
+          return game.boardCategories[idx] || 'science';
+        } else if (player.state === 'lane' && player.lane) {
+          const map = ['history','art','sports','geography'];
+          return map[player.lane.id % 4];
+        }
+        return 'science';
+      })();
+      io.to(gameId).emit("questionOpened", { category: tileCategory, askedBy: playerColor });
     });
 
     socket.on("movePlayer", (data: { position: { state: string; pos: number; lane?: any } }) => {
@@ -316,6 +360,77 @@ export function bindSocketServer(io: Server) {
       console.log(`Player disconnected: ${socket.id}`);
     });
   });
+}
+
+// Compute legal move options and step-by-step paths for a given player and dice
+function computeMoveOptions(game: GameState, playerColor: PlayerColor, dice: number) {
+  const player = game.players[playerColor];
+  type Step = { state: 'ring'; pos: number } | { state: 'lane'; lane: { id: number; depth: number; dir: 'in' | 'out' } };
+  const opts: Array<{ id: string; label: string; path: Step[]; meta: any }> = [];
+  const laneEntries = [0, 6, 12, 18];
+  const laneEntryIndex = (laneId: number) => (laneEntries[laneId] - 1 + 24) % 24;
+  
+  const addOption = (label: string, path: Step[], meta: any) => {
+    const id = `${playerColor}-${Date.now()}-${opts.length}`;
+    opts.push({ id, label, path, meta });
+  };
+  
+  if (player.state === 'center') {
+    for (let laneId = 0; laneId < 4; laneId++) {
+      const laneSteps = 3;
+      const entryIdx = laneEntryIndex(laneId);
+      if (dice <= laneSteps) {
+        const depth = 3 - dice + 1;
+        const path: Step[] = [];
+        for (let d = 1; d <= dice; d++) {
+          const stepDepth = 3 - d + 1;
+          path.push({ state: 'lane', lane: { id: laneId, depth: stepDepth, dir: 'out' } });
+        }
+        addOption(`Lane ${laneId} depth ${depth}`, path, { type: 'lane', laneId, depth });
+      } else {
+        const remaining = dice - (laneSteps + 1);
+        const base: Step[] = [{ state: 'ring', pos: entryIdx }];
+        const cwPath: Step[] = base.concat(Array.from({ length: remaining }, (_, i) => ({ state: 'ring', pos: (entryIdx + i + 1) % 24 })));
+        const ccwPath: Step[] = base.concat(Array.from({ length: remaining }, (_, i) => ({ state: 'ring', pos: (entryIdx - i - 1 + 24) % 24 })));
+        addOption(`Ring CW from lane ${laneId}`, cwPath, { type: 'ring', dir: 'cw' });
+        addOption(`Ring CCW from lane ${laneId}`, ccwPath, { type: 'ring', dir: 'ccw' });
+      }
+    }
+  } else if (player.state === 'ring') {
+    const cwPath: Step[] = Array.from({ length: dice }, (_, i) => ({ state: 'ring', pos: (player.pos + i + 1) % 24 }));
+    const ccwPath: Step[] = Array.from({ length: dice }, (_, i) => ({ state: 'ring', pos: (player.pos - i - 1 + 24) % 24 }));
+    addOption('Ring CW', cwPath, { type: 'ring', dir: 'cw' });
+    addOption('Ring CCW', ccwPath, { type: 'ring', dir: 'ccw' });
+    const entryIdxFor = (laneId: number) => laneEntryIndex(laneId);
+    const atEntryLane = [0,1,2,3].find((l) => entryIdxFor(l) === player.pos);
+    if (atEntryLane !== undefined && (game.players[playerColor].badges || []).length >= 6) {
+      const inPath: Step[] = Array.from({ length: Math.min(3, dice) }, (_, i) => ({ state: 'lane', lane: { id: atEntryLane as number, depth: i + 1, dir: 'in' } }));
+      addOption(`Enter lane ${atEntryLane} towards center`, inPath, { type: 'lane-in', laneId: atEntryLane });
+    }
+  } else if (player.state === 'lane' && player.lane) {
+    const path: Step[] = [];
+    let depth = player.lane.depth || 1;
+    const dir = player.lane.dir || 'out';
+    const laneId = player.lane.id || 0;
+    let remaining = dice;
+    if (dir === 'out') {
+      const toEdge = Math.max(0, 3 - depth);
+      const stepCount = Math.min(remaining, toEdge);
+      for (let i = 1; i <= stepCount; i++) path.push({ state: 'lane', lane: { id: laneId, depth: depth + i, dir: 'out' } });
+      remaining -= stepCount;
+      if (remaining > 0) {
+        const entryIdx = laneEntryIndex(laneId);
+        path.push({ state: 'ring', pos: entryIdx });
+        for (let i = 1; i <= remaining; i++) path.push({ state: 'ring', pos: (entryIdx + i) % 24 });
+      }
+      addOption(`Lane ${laneId} outward`, path, { type: 'lane-out', laneId });
+    } else {
+      const stepCount = Math.min(remaining, Math.max(0, 3 - (depth - 1)));
+      for (let i = 1; i <= stepCount; i++) path.push({ state: 'lane', lane: { id: laneId, depth: depth + i, dir: 'in' } });
+      addOption(`Lane ${laneId} inward`, path, { type: 'lane-in', laneId });
+    }
+  }
+  return opts;
 }
 
 function findAvailablePlayerSlot(game: GameState): PlayerColor {
