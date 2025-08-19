@@ -44,19 +44,19 @@ export default function TokenBalance({ address, className = '' }: TokenBalancePr
   };
 
   return (
-    <div className={`space-y-2 ${className}`}>
+    <div className={`flex items-center justify-between w-full ${className}`}>
       {/* TRIV Balance */}
       <div className="flex items-center gap-2">
-        <div className="w-6 h-6 bg-gradient-to-r from-yellow-400 to-orange-500 rounded-full flex items-center justify-center">
+        <div className="w-5 h-5 bg-gradient-to-r from-yellow-400 to-orange-500 rounded-full flex items-center justify-center">
           <span className="text-xs font-bold text-white">T</span>
         </div>
-        <span className="text-white font-bold text-lg">
+        <span className="text-white font-medium text-sm">
           {parseFloat(stats.balance).toFixed(0)} TRIV
         </span>
       </div>
 
       {/* Daily Claim */}
-      <div className="flex items-center gap-2">
+      <div className="flex items-center">
         {stats.canClaimDaily ? (
           <button
             onClick={handleClaim}
@@ -67,15 +67,9 @@ export default function TokenBalance({ address, className = '' }: TokenBalancePr
           </button>
         ) : (
           <div className="text-white/50 text-xs">
-            Next claim: {formatTimeUntilClaim(stats.timeUntilNextClaim)}
+            Next: {formatTimeUntilClaim(stats.timeUntilNextClaim)}
           </div>
         )}
-      </div>
-
-      {/* Stats */}
-      <div className="text-white/40 text-xs space-y-1">
-        <div>Games: {stats.gamesPlayed}</div>
-        <div>Questions: {stats.questionsAnswered}</div>
       </div>
     </div>
   );

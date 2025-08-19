@@ -2,47 +2,21 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createPublicClient, createWalletClient, http, isAddress } from 'viem';
 import { base, baseSepolia } from 'viem/chains';
 import { privateKeyToAccount } from 'viem/accounts';
+import { TRIV_TOKEN_CONFIG } from '../../../../config/contracts';
+import { getMockUser, updateMockUser, canClaimDaily, DAILY_CLAIM_AMOUNT } from '../../../lib/mockUsers';
+
 // Ensure Node.js runtime for viem compatibility
 export const runtime = 'nodejs';
 
 // Contract configuration
-const TRIV_TOKEN_ADDRESS = (process.env.TRIV_TOKEN_ADDRESS as `0x${string}`) || '0x0000000000000000000000000000000000000000';
 const BASE_RPC_URL = process.env.NEXT_PUBLIC_RPC_URL || 'https://sepolia.base.org';
 const CHAIN_ID = Number(process.env.NEXT_PUBLIC_CHAIN_ID || 84532); // 8453 mainnet, 84532 sepolia
 const CHAIN = CHAIN_ID === 8453 ? base : baseSepolia;
 
 // Check if we should use mock or real contract
-const USE_MOCK = !process.env.TRIV_TOKEN_ADDRESS ||
-  process.env.TRIV_TOKEN_ADDRESS === '0x0000000000000000000000000000000000000000' ||
+const USE_MOCK = !process.env.PRIVATE_KEY ||
+  process.env.PRIVATE_KEY === '0x0000000000000000000000000000000000000000000000000000000000000000' ||
   !process.env.PRIVATE_KEY;
-
-// Mock token system for development
-interface MockUserStats {
-  balance: string;
-  gamesPlayed: number;
-  questionsAnswered: number;
-  lastClaimTime: number;
-}
-
-const mockUsers = new Map<string, MockUserStats>();
-
-function getMockUser(address: string): MockUserStats {
-  if (!mockUsers.has(address)) {
-    mockUsers.set(address, {
-      balance: '100', // Start with 100 TRIV
-      gamesPlayed: 0,
-      questionsAnswered: 0,
-      lastClaimTime: 0
-    });
-  }
-  return mockUsers.get(address)!;
-}
-
-function canClaimDaily(user: MockUserStats): boolean {
-  const now = Date.now();
-  const dayInMs = 24 * 60 * 60 * 1000;
-  return now >= user.lastClaimTime + dayInMs;
-}
 
 // Real contract clients
 const publicClient = createPublicClient({
@@ -117,9 +91,12 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'Daily claim not available yet' }, { status: 400 });
       }
 
-      // Mock claim: Add 50 TRIV
-      user.balance = (parseFloat(user.balance) + 50).toString();
-      user.lastClaimTime = Date.now();
+      // Mock claim: Add DAILY_CLAIM_AMOUNT TRIV
+      const newBalance = (parseFloat(user.balance) + DAILY_CLAIM_AMOUNT).toString();
+      updateMockUser(address, {
+        balance: newBalance,
+        lastClaimTime: Date.now()
+      });
 
       return NextResponse.json({ 
         success: true, 
@@ -134,8 +111,8 @@ export async function POST(request: NextRequest) {
 
       // Check if user can claim
       const canClaim = await publicClient.readContract({
-        address: TRIV_TOKEN_ADDRESS,
-        abi: TRIV_TOKEN_ABI,
+        address: TRIV_TOKEN_CONFIG.address,
+        abi: TRIV_TOKEN_CONFIG.abi,
         functionName: 'canClaimDaily',
         args: [address]
       });
@@ -146,8 +123,8 @@ export async function POST(request: NextRequest) {
 
       // Execute gasless claim transaction
       const hash = await walletClient.writeContract({
-        address: TRIV_TOKEN_ADDRESS,
-        abi: TRIV_TOKEN_ABI,
+        address: TRIV_TOKEN_CONFIG.address,
+        abi: TRIV_TOKEN_CONFIG.abi,
         functionName: 'claimDailyTokens',
         args: []
       });
@@ -176,10 +153,10 @@ export async function GET(request: NextRequest) {
 
     // Try real contract read first when possible; fallback to mock
     try {
-      if (publicClient && TRIV_TOKEN_ADDRESS && isAddress(address)) {
+      if (publicClient && TRIV_TOKEN_CONFIG.address && isAddress(address)) {
         const stats = await publicClient.readContract({
-          address: TRIV_TOKEN_ADDRESS,
-          abi: TRIV_TOKEN_ABI,
+          address: TRIV_TOKEN_CONFIG.address,
+          abi: TRIV_TOKEN_CONFIG.abi,
           functionName: 'getUserStats',
           args: [address]
         });
@@ -201,7 +178,7 @@ export async function GET(request: NextRequest) {
     // Mock implementation fallback
     const user = getMockUser(address);
     const now = Date.now();
-    const dayInMs = 24 * 60 * 60 * 1000;
+    const dayInMs = 24 * 60 * 60 * 1000; // 24 hours as per contract
     const nextClaimTime = user.lastClaimTime + dayInMs;
     const timeUntilClaim = Math.max(0, Math.floor((nextClaimTime - now) / 1000));
 

@@ -1,14 +1,19 @@
 "use client";
 
 import { useMemo } from "react";
-import { useWallet } from "../hooks/useWallet";
+import { useAccount } from "wagmi";
+import { useMiniKit } from "@coinbase/onchainkit/minikit";
 
 interface Props {
   className?: string;
 }
 
 export default function WalletBadge({ className = "" }: Props) {
-  const { address, username, isConnected } = useWallet();
+  const { address, isConnected } = useAccount();
+  const { context } = useMiniKit();
+  
+  // Get Farcaster username from MiniKit context
+  const username = context?.user?.username || context?.user?.displayName || null;
 
   const label = useMemo(() => {
     if (username) return username;

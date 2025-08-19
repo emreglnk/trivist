@@ -4,12 +4,13 @@ import { useState, useCallback, useEffect, useMemo } from "react";
 import { useGameState, Player } from "../hooks/useGameState";
 import { useMovement } from "../hooks/useMovement";
 import { useRealtimeGame } from "../hooks/useRealtimeGame";
-import { useWallet } from "../hooks/useWallet";
+import { useAccount } from "wagmi";
 import GameBoard, { BoardOverlay } from "./GameBoard";
 import GameHUD from "./GameHUD";
 import QuestionModal from "./QuestionModal";
 import WalletButton from "./WalletButton";
 import WalletBadge from "./WalletBadge";
+import TokenBalance from "./TokenBalance";
 import Image from "next/image";
 
 interface QuestionPayload {
@@ -28,7 +29,7 @@ export default function TriviaGame() {
   const gameState = useGameState();
   const movement = useMovement();
   const realtimeGame = useRealtimeGame();
-  const wallet = useWallet();
+  const { address: walletAddress } = useAccount();
   const [overlay, setOverlay] = useState<BoardOverlay>(null);
   const [questionModal, setQuestionModal] = useState<{
     isOpen: boolean;
@@ -105,11 +106,11 @@ export default function TriviaGame() {
   useEffect(() => {
     if (isMultiplayer && realtimeGame.isConnected && !realtimeGame.gameState) {
       realtimeGame.joinRoom('auto', {
-        address: wallet.address || '',
+        address: walletAddress || '',
         signature: ''
       });
     }
-  }, [isMultiplayer, realtimeGame.isConnected, realtimeGame.gameState, wallet.address]);
+  }, [isMultiplayer, realtimeGame.isConnected, realtimeGame.gameState, walletAddress]);
 
   const handleRollDice = useCallback(async () => {
     if (isBusy || questionModal.isOpen || overlay) return;
@@ -555,12 +556,16 @@ export default function TriviaGame() {
       {/* Wallet & Multiplayer Controls */}
       <div className="space-y-3">
         {/* Wallet Connection */}
-        <div className="flex items-center justify-between p-3 bg-slate-800/50 rounded-lg border border-white/10">
-          <div className="flex items-center gap-2">
-            <span className="text-white text-sm font-medium">Wallet</span>
-            <WalletBadge />
+        <div className="p-3 bg-slate-800/50 rounded-lg border border-white/10">
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-2">
+              <WalletBadge />
+            </div>
+            <WalletButton />
           </div>
-          <WalletButton />
+          <div className="flex items-center justify-between">
+            <TokenBalance address={walletAddress || undefined} className="flex-1" />
+          </div>
         </div>
 
         {/* Multiplayer (auto-matchmaking) */}
@@ -593,7 +598,7 @@ export default function TriviaGame() {
           diceValue={(isMultiplayer && realtimeGame.gameState ? realtimeGame.gameState.diceValue : gameState.diceValue)}
           onRollDice={handleRollDice}
           players={(isMultiplayer && realtimeGame.gameState ? (Object.fromEntries(Object.entries(realtimeGame.gameState.players as any).map(([k, sp]: any) => [k, { ...sp, badges: new Set(sp.badges || []) }])) as any) : gameState.players)}
-          walletAddress={wallet.address || undefined}
+          walletAddress={walletAddress || undefined}
         />
       </div>
 
@@ -619,7 +624,7 @@ export default function TriviaGame() {
         category={questionModal.category}
         onAnswer={handleQuestionAnswer}
         onClose={handleCloseModal}
-        walletAddress={wallet.address || undefined}
+        walletAddress={walletAddress || undefined}
         readOnly={!!questionModal.readOnly}
         initialQuestion={questionModal.injectedQuestion || undefined as any}
       />
@@ -683,27 +688,7 @@ export default function TriviaGame() {
         })}
       </div>
 
-      {/* Debug info */}
-      <div className="text-xs text-gray-400 mt-4">
-        <details>
-          <summary className="cursor-pointer hover:text-gray-300">Debug Info</summary>
-          <pre className="mt-2 text-xs bg-slate-800 text-gray-300 p-3 rounded-lg overflow-auto border border-slate-700">
-            Current: {gameState.currentPlayer}
-            {'\n'}Gold: {gameState.gold}
-            {'\n'}Dice: {gameState.diceValue}
-            {'\n'}Player States: {JSON.stringify(
-              Object.fromEntries(
-                Object.entries(gameState.players).map(([id, p]) => [
-                  id, 
-                  { state: p.state, pos: p.pos, badges: p.badges.size, lane: p.lane }
-                ])
-              ), 
-              null, 
-              2
-            )}
-          </pre>
-        </details>
-      </div>
+
     </div>
   );
 }

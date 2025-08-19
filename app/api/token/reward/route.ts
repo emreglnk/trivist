@@ -1,48 +1,25 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createWalletClient, http } from 'viem';
-import { baseSepolia } from 'viem/chains';
+import { base, baseSepolia } from 'viem/chains';
 import { privateKeyToAccount } from 'viem/accounts';
+import { TRIV_TOKEN_CONFIG } from '../../../../config/contracts';
+import { getMockUser, updateMockUser, QUESTION_REWARD } from '../../../lib/mockUsers';
 
 // Ensure Node.js runtime for viem compatibility
 export const runtime = 'nodejs';
 
 // Contract configuration
-const TRIV_TOKEN_ADDRESS = process.env.TRIV_TOKEN_ADDRESS as `0x${string}` || '0x3129DD4d0454E94fcC98C7880A730038fD325063';
 const BASE_RPC_URL = process.env.NEXT_PUBLIC_RPC_URL || 'https://sepolia.base.org';
+const CHAIN_ID = Number(process.env.NEXT_PUBLIC_CHAIN_ID || 84532); // 8453 mainnet, 84532 sepolia
+const CHAIN = CHAIN_ID === 8453 ? base : baseSepolia;
 
-// Check if we should use mock or real contract
-const USE_MOCK = !process.env.TRIV_TOKEN_ADDRESS || 
-                 process.env.TRIV_TOKEN_ADDRESS === '0x0000000000000000000000000000000000000000' ||
-                 !process.env.PRIVATE_KEY;
+// Check if we should use mock or real contract (private key presence/validity)
+const USE_MOCK = !process.env.PRIVATE_KEY ||
+                 process.env.PRIVATE_KEY === '0x0000000000000000000000000000000000000000000000000000000000000000';
 
-// Mock token system for development
-interface MockUserStats {
-  balance: string;
-  gamesPlayed: number;
-  questionsAnswered: number;
-  lastClaimTime: number;
-}
+// Using shared mock system from app/lib/mockUsers
 
-const mockUsers = new Map<string, MockUserStats>();
-
-function getMockUser(address: string): MockUserStats {
-  if (!mockUsers.has(address)) {
-    mockUsers.set(address, {
-      balance: '100',
-      gamesPlayed: 0,
-      questionsAnswered: 0,
-      lastClaimTime: 0
-    });
-  }
-  return mockUsers.get(address)!;
-}
-
-// Real contract clients
-// publicClient can be uncommented if needed for reading contract state
-// const publicClient = createPublicClient({
-//   chain: baseSepolia,
-//   transport: http(BASE_RPC_URL)
-// });
+// Real contract client (writes only)
 
 // Normalize PRIVATE_KEY (add 0x if missing) and guard account creation
 let account: ReturnType<typeof privateKeyToAccount> | null = null;
@@ -59,19 +36,11 @@ try {
 
 const walletClient = account ? createWalletClient({
   account,
-  chain: baseSepolia,
+  chain: CHAIN,
   transport: http(BASE_RPC_URL)
 }) : null;
 
-const TRIV_TOKEN_ABI = [
-  {
-    "inputs": [{"internalType": "address", "name": "user", "type": "address"}],
-    "name": "rewardCorrectAnswer",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  }
-];
+// TRIV_TOKEN_CONFIG.abi used for contract writes
 
 export async function POST(request: NextRequest) {
   try {
@@ -86,17 +55,20 @@ export async function POST(request: NextRequest) {
     }
 
     if (USE_MOCK) {
-      // Mock implementation
+      // Mock implementation using shared constants
       const user = getMockUser(address);
-      
-      // Mock reward: Add 1 TRIV for correct answer
-      user.balance = (parseFloat(user.balance) + 1).toString();
-      user.questionsAnswered++;
+      const newBalance = (parseFloat(user.balance) + QUESTION_REWARD).toString();
+      const updated = updateMockUser(address, {
+        balance: newBalance,
+        questionsAnswered: user.questionsAnswered + 1
+      });
 
       return NextResponse.json({ 
         success: true, 
-        transactionHash: '0x' + Math.random().toString(16).substr(2, 64), // Mock hash
-        reward: '1'
+        transactionHash: '0x' + Math.random().toString(16).substr(2, 64),
+        reward: QUESTION_REWARD.toString(),
+        newBalance: updated.balance,
+        questionsAnswered: updated.questionsAnswered
       });
     } else {
       // Real contract implementation
@@ -106,8 +78,8 @@ export async function POST(request: NextRequest) {
 
       // Execute gasless reward transaction
       const hash = await walletClient.writeContract({
-        address: TRIV_TOKEN_ADDRESS,
-        abi: TRIV_TOKEN_ABI,
+        address: TRIV_TOKEN_CONFIG.address,
+        abi: TRIV_TOKEN_CONFIG.abi,
         functionName: 'rewardCorrectAnswer',
         args: [address]
       });
