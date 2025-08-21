@@ -9,8 +9,8 @@ import { getMockUser, updateMockUser, canClaimDaily, DAILY_CLAIM_AMOUNT } from '
 export const runtime = 'nodejs';
 
 // Contract configuration
-const BASE_RPC_URL = process.env.NEXT_PUBLIC_RPC_URL || 'https://sepolia.base.org';
-const CHAIN_ID = Number(process.env.NEXT_PUBLIC_CHAIN_ID || 84532); // 8453 mainnet, 84532 sepolia
+const BASE_RPC_URL = process.env.NEXT_PUBLIC_RPC_URL || 'https://mainnet.base.org';
+const CHAIN_ID = Number(process.env.NEXT_PUBLIC_CHAIN_ID || 8453); // 8453 mainnet, 84532 sepolia
 const CHAIN = CHAIN_ID === 8453 ? base : baseSepolia;
 
 // Check if we should use mock or real contract

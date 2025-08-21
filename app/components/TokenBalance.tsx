@@ -8,7 +8,7 @@ interface TokenBalanceProps {
 }
 
 export default function TokenBalance({ address, className = '' }: TokenBalanceProps) {
-  const { stats, loading, error, claimDailyTokens, formatTimeUntilClaim } = useTokenSystem(address);
+  const { stats, loading, error, formatTimeUntilClaim, claimDailyTokens } = useTokenSystem(address);
 
   if (!address) {
     return (
@@ -37,10 +37,8 @@ export default function TokenBalance({ address, className = '' }: TokenBalancePr
   if (!stats) return null;
 
   const handleClaim = async () => {
-    const success = await claimDailyTokens();
-    if (success) {
-      alert('🎉 Successfully claimed 50 TRIV tokens!');
-    }
+    // Server-side gasless claim via /api/token/claim
+    await claimDailyTokens();
   };
 
   return (
@@ -58,13 +56,15 @@ export default function TokenBalance({ address, className = '' }: TokenBalancePr
       {/* Daily Claim */}
       <div className="flex items-center">
         {stats.canClaimDaily ? (
-          <button
-            onClick={handleClaim}
-            disabled={loading}
-            className="px-3 py-1 bg-green-600 hover:bg-green-700 text-white text-xs rounded-lg font-medium transition-colors disabled:opacity-50"
-          >
-            {loading ? 'Claiming...' : 'Claim 50 TRIV'}
-          </button>
+          <div className="flex flex-col items-end gap-1">
+            <button
+              onClick={handleClaim}
+              disabled={loading}
+              className="px-3 py-1 bg-green-600 hover:bg-green-700 text-white text-xs rounded-lg font-medium transition-colors disabled:opacity-50"
+            >
+              {loading ? 'Processing...' : 'Claim 50 TRIV'}
+            </button>
+          </div>
         ) : (
           <div className="text-white/50 text-xs">
             Next: {formatTimeUntilClaim(stats.timeUntilNextClaim)}

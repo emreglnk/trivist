@@ -177,9 +177,13 @@ export async function GET(request: Request) {
         }
         const connected = playerColors.filter(c => game.players[c].isConnected);
         const idx = connected.indexOf(game.currentPlayer);
-        game.currentPlayer = connected[(idx+1)%connected.length];
+        const nextPlayer = connected[(idx+1)%connected.length];
+        const turnChanged = !msg.correct; // keep turn on correct answer
+        if (turnChanged) {
+          game.currentPlayer = nextPlayer;
+        }
         broadcast(game, { type: 'gameState', ...game });
-        broadcast(game, { type: 'answerResult', answeredBy: playerColor, correct: !!msg.correct });
+        broadcast(game, { type: 'answerResult', answeredBy: playerColor, correct: !!msg.correct, nextPlayer, turnChanged });
         break;
       }
       default:

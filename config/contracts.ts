@@ -102,11 +102,11 @@ export const TRIV_TOKEN_CONFIG: ContractConfig = {
 
 // Network Configuration
 export const NETWORK_CONFIG = {
-  chainId: parseInt(process.env.NEXT_PUBLIC_CHAIN_ID || '84532'),
-  name: 'Base Sepolia',
+  chainId: parseInt(process.env.NEXT_PUBLIC_CHAIN_ID || '8453'),
+  name: 'Base',
   currency: 'ETH',
-  explorerUrl: 'https://sepolia.basescan.org',
-  rpcUrl: process.env.NEXT_PUBLIC_RPC_URL || 'https://sepolia.base.org'
+  explorerUrl: 'https://basescan.org',
+  rpcUrl: process.env.NEXT_PUBLIC_RPC_URL || 'https://mainnet.base.org'
 };
 
 // Contract Deployment Instructions
